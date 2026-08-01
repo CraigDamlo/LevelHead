@@ -1,0 +1,11 @@
+{
+  "name": "levelhead",
+  "version": "0.0.0",
+  "description": "Browser-based automatic mixing tool using the Web Audio API",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m http.server 8000"
+  },
+  "license": "MIT"
+}
