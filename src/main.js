@@ -7,6 +7,7 @@
 // starts, the track-list rendering below should move to src/ui/.
 
 import { loadFiles } from './audio/loader.js';
+import { analyzeTrack } from './analysis/index.js';
 
 /** @type {import('./audio/track.js').Track[]} */
 const tracks = [];
@@ -47,8 +48,10 @@ async function handleFiles(fileList) {
   renderErrors(errors);
   renderTracks();
 
-  if (newTracks.length > 0) {
-    console.log('levelhead: loaded tracks', tracks);
+  for (const track of newTracks) {
+    const analysis = analyzeTrack(track);
+    console.log(`levelhead: analyzed "${track.name}"`, analysis);
+    renderTracks(); // re-render so the loudness/onset readout appears
   }
 }
 
@@ -57,12 +60,21 @@ function renderTracks() {
   for (const track of tracks) {
     const el = document.createElement('div');
     el.className = 'track';
+    const meta = `${formatDuration(track.duration)} · ${track.numberOfChannels}ch · ${track.sampleRate}Hz`;
+    const analysisMeta = track.analysis
+      ? ` · ${formatDb(track.analysis.loudness.averageDb)} avg · ${track.analysis.transients.count} onsets`
+      : ' · analyzing…';
     el.innerHTML = `
       <span class="track-name">${escapeHtml(track.name)}</span>
-      <span class="track-meta">${formatDuration(track.duration)} · ${track.numberOfChannels}ch · ${track.sampleRate}Hz</span>
+      <span class="track-meta">${meta}${analysisMeta}</span>
     `;
     tracksEl.appendChild(el);
   }
+}
+
+function formatDb(db) {
+  if (!isFinite(db)) return '−∞ dB';
+  return `${db.toFixed(1)} dB`;
 }
 
 function renderErrors(errors) {
