@@ -7,7 +7,7 @@ session log entry, even a short one.
 ## Checklist
 
 - [x] Phase 0 — Scaffold
-- [ ] Phase 1 — Audio loading
+- [x] Phase 1 — Audio loading
 - [ ] Phase 2 — Analysis pipeline
 - [ ] Phase 3 — Decision engine
 - [ ] Phase 4 — Processing chain
@@ -17,7 +17,7 @@ session log entry, even a short one.
 
 ## Current focus
 
-Phase 1 — Audio loading. Not started.
+Phase 2 — Analysis pipeline. Not started.
 
 ## Session log
 
@@ -26,7 +26,25 @@ half-done, what to do next, any open decisions.
 
 ---
 
-**Session 0 (scaffold)**
-Created directory structure, README, AI_BUILD_GUIDE.md, this file,
-index.html skeleton, package.json, .gitignore. No app code written yet.
-Next: start Phase 1 — audio loading (file picker + decode to AudioBuffer).
+**Session 1 (Phase 1 — audio loading)**
+Implemented `src/audio/track.js` (plain Track class holding an
+AudioBuffer + metadata, with `analysis`/`targets` fields left null for
+later phases) and `src/audio/loader.js` (shared lazily-created
+AudioContext, `loadFile`/`loadFiles` using `decodeAudioData`,
+`Promise.allSettled` so one bad file doesn't block the rest). Wired it
+into `main.js` with a drag-and-drop + click-to-browse zone in
+`index.html`; loaded tracks render as a simple list with name/duration/
+channels/sample rate, decode errors show inline.
+
+No processing or playback yet — tracks just sit in memory as decoded
+AudioBuffers. Smoke-tested that all files serve correctly over a local
+static server; haven't tested actual file decoding in a real browser yet
+(worth doing before starting Phase 2 — try a couple of real audio files
+of different formats/channel counts).
+
+Next: Phase 2 — analysis pipeline. Start with `src/analysis/loudness.js`
+(RMS over ~400ms windows is fine for v1, don't over-engineer true LUFS
+yet) using an `OfflineAudioContext` per track. Decide there whether to
+do spectral analysis via `AnalyserNode` inside an OfflineAudioContext or
+a manual FFT — document whichever is chosen in that file's comments so
+it doesn't need re-deciding next session.
