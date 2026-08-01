@@ -10,6 +10,7 @@ session log entry, even a short one.
 - [x] Phase 1 — Audio loading
 - [x] Phase 2 — Analysis pipeline
 - [x] Phase 3 — Decision engine
+- [x] Phase 4 — Processing chain
 - [ ] Phase 4 — Processing chain
 - [ ] Phase 5 — UI: meters and playback
 - [ ] Phase 6 — UI: manual overrides
@@ -17,7 +18,9 @@ session log entry, even a short one.
 
 ## Current focus
 
-Phase 4 — Processing chain. Not started.
+Phase 5 — UI: meters and playback. Partially started (see below) — a
+minimal play/stop already exists from Phase 4; real transport polish
+and meters are still open.
 
 ## Session log
 
@@ -26,50 +29,52 @@ half-done, what to do next, any open decisions.
 
 ---
 
-**Session 3 (Phase 3 — decision engine)**
-Open decision from last session — how to pick the reference/lead track
-— resolved: **manual marking in the UI**, not auto-detection. Implemented:
+**Session 4 (Phase 4 — processing chain)**
+Implemented the actual Web Audio graph:
+- `src/processing/bus.js` — `createBus(context)`, a single shared
+  `DynamicsCompressorNode` (threshold -12dB, ratio 3:1) connected to
+  `context.destination`. Simple glue compression to stop summed tracks
+  clipping, not a mastering limiter — documented as intentionally basic.
+- `src/processing/trackChain.js` — `buildTrackChain(context, track,
+  destination)` builds source → gain → [peaking EQ filter per masking
+  cut] → panner → destination per track, reading values straight from
+  `track.targets` (gain in dB converted to linear, EQ moves mapped from
+  band label to an approximate center frequency, pan applied directly).
+  Falls back to neutral values if `.targets` isn't set yet.
 
-- `src/decision/reference.js` — `determineReferenceTrack()`. Uses the
-  manually-marked track (`track.isLead`) if one exists; falls back to
-  loudest-by-average-dB only so the engine isn't broken with nothing
-  marked yet. The fallback reason string says as much, and the UI should
-  keep nudging toward marking a real lead (it currently does, via the
-  "Mark lead" button always being visible).
-- `src/decision/masking.js` — per-band conflict detection between the
-  reference and every other track; cuts the non-reference track 3dB in
-  any band where both tracks have ≥15% spectral share.
-- `src/decision/levels.js` — targets each non-reference track to sit
-  3dB below the reference's average loudness, clamped to ±6dB gain
-  adjustment.
-- `src/decision/panning.js` — bass/sub-dominant tracks (≥35% combined
-  share) and the reference stay centered; everything else spreads
-  evenly across the stereo field.
-- `src/decision/index.js` — orchestrates all of the above, stores
-  `track.targets = { gainDb, pan, eqMoves, reasons }` on each track.
-  Every decision carries a human-readable reason string end to end.
+Verified node wiring order and parameter math with a mocked Web Audio
+context in Node (no real AudioContext available outside a browser) —
+confirmed the connection chain is source→gain→eq→panner→destination in
+that order, and that gain/pan/EQ frequency/EQ gain values all match
+what the decision engine produced. This only proves the *code* is
+correct, not that it *sounds* right — that needs real ears in a real
+browser.
 
-Verified with synthetic vocal/bass/guitar tracks outside the browser
-(Node): marked-lead vocal correctly won reference status, the
-mid-range-competing guitar got the expected EQ cut, the loud bass got
-pulled down in level while staying centered. All three checks passed.
+Added a minimal play/stop control ahead of full Phase 5 — this wasn't
+optional, since Phase 4's own definition of done ("audibly different
+result") requires *something* to trigger playback with. `main.js` now
+has `playMix()`/`stopMix()`: builds fresh chains for every track with
+`.targets` set, starts them together ~50ms in the future (small buffer
+for scheduling), and auto-stops when the longest track ends. Because
+`AudioBufferSourceNode` is one-shot, there's no pause/resume — every
+play rebuilds from scratch. Marking a new lead track while something is
+playing stops it first, since the old chain's EQ/gain nodes are already
+locked to the previous targets.
 
-UI: added a "Mark lead" / "★ Lead" toggle button per track row (click
-to mark; only one track can be lead at a time). Track rows show gain/
-pan/EQ-cut-count once the decision engine has run, and the reason
-strings are available as a title/tooltip on the lead button for now —
-a real "why" panel is Phase 5/6 UI work, this is just enough to verify
-the engine is doing something sensible by eye.
+**This has not been tested with real audio in a real browser yet** —
+only synthetic tracks and mocked Web Audio nodes, since neither is
+available in this environment. Testing with actual multitrack material
+by ear is the critical next step, ideally before adding any more
+features on top, since it's the first point where "does this sound
+good" can actually be evaluated instead of inferred from numbers.
 
-Not yet tested with real audio/real multitrack material — only
-synthetic tones. Worth doing before Phase 4, since real spectral
-content is messier than pure sine waves and might reveal the 15%-share
-masking threshold or the 3dB cut amount need tuning.
+Not done: no pause (only stop+restart), no scrubbing/seek, no visual
+playhead, no per-track mute/solo, no meters. All squarely Phase 5.
 
-Next: Phase 4 — processing chain. Build `src/processing/trackChain.js`
-(per-track GainNode → BiquadFilterNode(s) for the EQ cuts → StereoPannerNode)
-and `src/processing/bus.js` (sums all tracks into a shared
-DynamicsCompressorNode → destination). Apply each track's `.targets`
-directly to the corresponding audio params. This is the first phase
-where something is actually audible — good point to sanity-check the
-whole pipeline by ear on a real multitrack recording.
+Next: Phase 5 — UI: meters and playback. The play/stop button from this
+session covers the "playback" half loosely; focus next session on
+level meters (even a simple static per-track peak/RMS readout counts
+for v1 — doesn't need to be live-updating at first) and showing the
+decision engine's reasoning more visibly than a button tooltip (a
+proper panel, not `title=`). Real-browser testing with actual audio
+should happen before or alongside this session, not after.

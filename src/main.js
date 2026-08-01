@@ -6,17 +6,37 @@
 // enough UI yet to warrant its own src/ui module. Once Phase 5 UI work
 // starts, the track-list rendering below should move to src/ui/.
 
-import { loadFiles } from './audio/loader.js';
+import { loadFiles, getAudioContext } from './audio/loader.js';
 import { analyzeTrack } from './analysis/index.js';
 import { runDecisionEngine } from './decision/index.js';
+import { buildTrackChain } from './processing/trackChain.js';
+import { createBus } from './processing/bus.js';
 
 /** @type {import('./audio/track.js').Track[]} */
 const tracks = [];
+
+// Phase 4 playback state. This is a minimal play/stop, not the full
+// Phase 5 transport (no scrubbing, no per-track mute/solo, no meters).
+// AudioBufferSourceNodes are one-shot, so each play rebuilds the chain
+// from scratch rather than pausing/resuming an existing one.
+let activeChains = [];
+let activeBus = null;
+let isPlaying = false;
+let stopTimeoutId = null;
 
 const fileInput = document.getElementById('file-input');
 const dropZone = document.getElementById('drop-zone');
 const tracksEl = document.getElementById('tracks');
 const errorsEl = document.getElementById('errors');
+const playBtn = document.getElementById('play-btn');
+
+playBtn.addEventListener('click', () => {
+  if (isPlaying) {
+    stopMix();
+  } else {
+    playMix();
+  }
+});
 
 dropZone.addEventListener('click', () => fileInput.click());
 
@@ -56,14 +76,17 @@ async function handleFiles(fileList) {
 
   runDecisions();
   renderTracks();
+  updatePlayButton();
 }
 
 function setLeadTrack(trackId) {
+  stopMix(); // targets are about to change under any currently-playing chain
   for (const track of tracks) {
     track.isLead = track.id === trackId;
   }
   runDecisions();
   renderTracks();
+  updatePlayButton();
 }
 
 function runDecisions() {
@@ -71,6 +94,47 @@ function runDecisions() {
   if (result.referenceTrackId !== null) {
     console.log(`levelhead: decision engine ran — reference: ${result.referenceReason}`, result);
   }
+}
+
+function playMix() {
+  const playable = tracks.filter((t) => t.targets);
+  if (playable.length === 0) return;
+
+  const context = getAudioContext();
+  const bus = createBus(context);
+  const chains = playable.map((track) => buildTrackChain(context, track, bus));
+
+  const startAt = context.currentTime + 0.05;
+  for (const chain of chains) chain.start(startAt);
+
+  activeChains = chains;
+  activeBus = bus;
+  isPlaying = true;
+  updatePlayButton();
+
+  const maxDuration = Math.max(...playable.map((t) => t.duration));
+  stopTimeoutId = setTimeout(() => {
+    if (isPlaying) stopMix();
+  }, (maxDuration + 0.2) * 1000);
+}
+
+function stopMix() {
+  if (stopTimeoutId) {
+    clearTimeout(stopTimeoutId);
+    stopTimeoutId = null;
+  }
+  for (const chain of activeChains) chain.stop();
+  if (activeBus) activeBus.disconnect();
+  activeChains = [];
+  activeBus = null;
+  isPlaying = false;
+  updatePlayButton();
+}
+
+function updatePlayButton() {
+  const playableCount = tracks.filter((t) => t.targets).length;
+  playBtn.disabled = playableCount === 0;
+  playBtn.textContent = isPlaying ? '■ Stop' : '▶ Play mix';
 }
 
 function renderTracks() {
