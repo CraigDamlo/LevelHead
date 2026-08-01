@@ -18,10 +18,31 @@
     .track {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       padding: 10px 14px;
       border: 1px solid #ddd;
       border-radius: 6px;
       margin-bottom: 8px;
+      gap: 12px;
+    }
+    .track.is-lead {
+      border-color: #c9a227;
+      background: #fffbea;
+    }
+    .lead-toggle {
+      flex-shrink: 0;
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      background: #fff;
+      cursor: pointer;
+    }
+    .track.is-lead .lead-toggle {
+      border-color: #c9a227;
+      background: #c9a227;
+      color: #fff;
+    }
       font-size: 14px;
     }
     .track-name {

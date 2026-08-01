@@ -23,5 +23,11 @@ export class Track {
     // hasn't run yet when inspecting a track in the console.
     this.analysis = null;   // Phase 2
     this.targets = null;    // Phase 3 (gain/EQ/pan targets + reasons)
+
+    // Phase 3: user-marked lead/reference track. Only one track should
+    // have this true at a time — enforced by the UI layer, not here.
+    // If no track is marked, the decision engine falls back to the
+    // loudest track (see src/decision/reference.js).
+    this.isLead = false;
   }
 }
