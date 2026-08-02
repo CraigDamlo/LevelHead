@@ -18,6 +18,8 @@ import { setGainOverride, clearGainOverride, setPanOverride, clearPanOverride } 
 import { createTransport } from './ui/transport.js';
 import { readLevel } from './ui/meters.js';
 import { dbToLinear } from './processing/trackChain.js';
+import { renderMix } from './processing/render.js';
+import { audioBufferToWav } from './processing/wavEncoder.js';
 
 /** @type {import('./audio/track.js').Track[]} */
 const tracks = [];
@@ -28,6 +30,7 @@ transport.onEnded(() => {
 });
 
 let meterLoopId = null;
+let isExporting = false;
 
 const fileInput = document.getElementById('file-input');
 const dropZone = document.getElementById('drop-zone');
@@ -37,6 +40,9 @@ const playBtn = document.getElementById('play-btn');
 const pauseBtn = document.getElementById('pause-btn');
 const stopBtn = document.getElementById('stop-btn');
 const timeEl = document.getElementById('transport-time');
+const exportBtn = document.getElementById('export-btn');
+
+exportBtn.addEventListener('click', handleExport);
 
 playBtn.addEventListener('click', () => {
   if (transport.play(tracks)) {
@@ -121,11 +127,48 @@ function updateTransportControls() {
   playBtn.textContent = status === 'paused' ? '▶ Resume' : '▶ Play mix';
   pauseBtn.disabled = status !== 'playing';
   stopBtn.disabled = status === 'stopped';
+  exportBtn.disabled = isExporting || !hasPlayable;
 
   if (status === 'stopped') {
     stopMeterLoop();
     timeEl.textContent = '';
   }
+}
+
+async function handleExport() {
+  if (isExporting || !tracks.some((t) => t.targets)) return;
+
+  isExporting = true;
+  updateTransportControls();
+  const originalLabel = exportBtn.textContent;
+  exportBtn.textContent = 'Rendering…';
+
+  try {
+    // Offline rendering is independent of live playback — export while
+    // something is playing is fine, they don't share any mutable state
+    // (renderMix builds its own OfflineAudioContext and its own chains).
+    const renderedBuffer = await renderMix(tracks);
+    const wavBlob = audioBufferToWav(renderedBuffer);
+    downloadBlob(wavBlob, 'levelhead-mix.wav');
+  } catch (err) {
+    console.error('levelhead: export failed', err);
+    errorsEl.textContent = `Export failed: ${err.message}`;
+  } finally {
+    isExporting = false;
+    exportBtn.textContent = originalLabel;
+    updateTransportControls();
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function startMeterLoop() {
@@ -390,4 +433,4 @@ function escapeHtml(str) {
 }
 
 updateTransportControls();
-console.log('levelhead: Phase 6 (manual gain/pan overrides) wired up');
+console.log('levelhead: Phase 7 (WAV export) wired up');

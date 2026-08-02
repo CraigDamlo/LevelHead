@@ -162,6 +162,15 @@
       color: #666;
       font-size: 14px;
     }
+    .export-btn {
+      margin-left: auto;
+      background: #1a5c2e !important;
+      border-color: #1a5c2e !important;
+    }
+    .export-btn:disabled {
+      background: #ccc !important;
+      border-color: #ccc !important;
+    }
   </style>
 </head>
 <body>
@@ -181,6 +190,7 @@
     <button id="pause-btn" disabled>⏸ Pause</button>
     <button id="stop-btn" disabled>■ Stop</button>
     <span id="transport-time"></span>
+    <button id="export-btn" disabled class="export-btn">⬇ Export mix</button>
   </div>
 
   <script type="module" src="./src/main.js"></script>
