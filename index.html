@@ -171,6 +171,30 @@
       background: #ccc !important;
       border-color: #ccc !important;
     }
+    #preset-panel {
+      margin-top: 16px;
+      padding: 12px 14px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: #fafafa;
+    }
+    #preset-panel label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #444;
+      margin-right: 8px;
+    }
+    #preset-select {
+      font-size: 14px;
+      padding: 5px 8px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    #preset-description {
+      margin: 8px 0 0;
+      font-size: 13px;
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -180,6 +204,12 @@
   <div id="drop-zone">
     Drop audio files here, or click to choose files
     <input type="file" id="file-input" accept="audio/*" multiple hidden>
+  </div>
+
+  <div id="preset-panel">
+    <label for="preset-select">Genre preset</label>
+    <select id="preset-select"></select>
+    <p id="preset-description"></p>
   </div>
 
   <div id="errors"></div>

@@ -8,27 +8,45 @@
 // considered. Requires at least one analyzed track; with fewer than two
 // tracks, masking/panning rules degenerate harmlessly (nothing to
 // compete with, nothing to spread).
+//
+// Phase 7c: accepts a genre preset id (see src/decision/presets.js) and
+// threads its parameters through to each rule function. Defaults to
+// the 'default' preset if omitted, so existing callers don't need to
+// change.
 
 import { determineReferenceTrack } from './reference.js';
 import { detectMasking } from './masking.js';
 import { balanceLevels } from './levels.js';
 import { assignPanning } from './panning.js';
 import { applyOverrides } from './overrides.js';
+import { getPreset, DEFAULT_PRESET_ID } from './presets.js';
 
 /**
  * @param {import('../audio/track.js').Track[]} tracks
- * @returns {{referenceTrackId: number|null, referenceReason: string|null, targetsByTrack: Map}}
+ * @param {string} [presetId]
+ * @returns {{referenceTrackId: number|null, referenceReason: string|null, presetId: string, targetsByTrack: Map}}
  */
-export function runDecisionEngine(tracks) {
+export function runDecisionEngine(tracks, presetId = DEFAULT_PRESET_ID) {
   const analyzed = tracks.filter((t) => t.analysis);
   if (analyzed.length === 0) {
-    return { referenceTrackId: null, referenceReason: null, targetsByTrack: new Map() };
+    return { referenceTrackId: null, referenceReason: null, presetId, targetsByTrack: new Map() };
   }
 
+  const preset = getPreset(presetId);
+
   const { track: referenceTrack, reason: referenceReason } = determineReferenceTrack(analyzed);
-  const eqMovesByTrack = detectMasking(analyzed, referenceTrack);
-  const gainByTrack = balanceLevels(analyzed, referenceTrack);
-  const panByTrack = assignPanning(analyzed, referenceTrack);
+  const eqMovesByTrack = detectMasking(analyzed, referenceTrack, {
+    significantShare: preset.maskingSignificantShare,
+    cutDb: preset.maskingCutDb,
+  });
+  const gainByTrack = balanceLevels(analyzed, referenceTrack, {
+    targetOffsetDb: preset.levelTargetOffsetDb,
+    maxAdjustDb: preset.levelMaxAdjustDb,
+  });
+  const panByTrack = assignPanning(analyzed, referenceTrack, {
+    bassDominantThreshold: preset.panBassDominantThreshold,
+    spreadWidth: preset.panSpreadWidth,
+  });
 
   for (const track of analyzed) {
     const gain = gainByTrack.get(track.id);
@@ -51,6 +69,7 @@ export function runDecisionEngine(tracks) {
   return {
     referenceTrackId: referenceTrack.id,
     referenceReason,
+    presetId,
     targetsByTrack: new Map(analyzed.map((t) => [t.id, t.targets])),
   };
 }

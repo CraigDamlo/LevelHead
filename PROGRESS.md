@@ -14,6 +14,7 @@ session log entry, even a short one.
 - [x] Phase 5 — UI: meters and playback
 - [x] Phase 6 — UI: manual overrides
 - [x] Phase 7a — Export to WAV
+- [x] Phase 7c — Genre presets
 - [ ] Phase 4 — Processing chain
 - [ ] Phase 5 — UI: meters and playback
 - [ ] Phase 6 — UI: manual overrides
@@ -21,10 +22,10 @@ session log entry, even a short one.
 
 ## Current focus
 
-Phase 7b/7c — still open: save/load session, and genre presets, were
-the other two Phase 7 candidates discussed but not chosen yet. Real-
-browser testing (carried over from sessions 4/5/6) is still the single
-most overdue item — please do this before anything else.
+Phase 7b (save/load session) is the last originally-discussed Phase 7
+candidate. Real-browser testing is still the single most overdue item
+— now carried across five sessions (4, 5, 6, 7a, 7c). Please prioritize
+this over any further feature work.
 
 ## Session log
 
@@ -33,43 +34,66 @@ half-done, what to do next, any open decisions.
 
 ---
 
-**Session 7 (Phase 7a — export to WAV)**
-Of the three Phase 7 candidates (export, save/load, genre presets),
-export was picked first. Implemented:
+**Session 8 (Phase 7c — genre presets)**
+Parametrized the three decision rules rather than adding new rule
+logic — each of `detectMasking()`, `balanceLevels()`, `assignPanning()`
+now accepts an optional `params` object (masking share/cut thresholds,
+level offset/clamp, pan bass-threshold/spread-width) with the exact
+same defaults as before if omitted, so this was a non-breaking change.
 
-- `src/processing/render.js` — `renderMix(tracks)`, offline rendering
-  via `OfflineAudioContext`. Deliberately reuses `buildTrackChain()`
-  and `createBus()` unchanged from live playback (both already accepted
-  a generic Web Audio context, so this needed zero changes to either
-  file) — export is guaranteed to sound identical to "Play mix" because
-  it's the same code path, not a parallel implementation that could
-  drift out of sync. Output is fixed at 2 channels, sample rate matches
-  the shared AudioContext's rate, length is sized to the longest track.
-  Throws a clear error if called with no analyzed/decided tracks.
-- `src/processing/wavEncoder.js` — `audioBufferToWav()`, hand-rolled
-  16-bit PCM WAV encoding (44-byte header + interleaved samples). No
-  external dependency — chose 16-bit over 32-bit float for maximum
-  compatibility with whatever the file gets opened in afterward.
-- `main.js` — added an Export button (green, pushed to the right of the
-  transport cluster via `margin-left: auto`). Shows "Rendering…" and
-  disables itself during render; triggers a browser download via a
-  temporary anchor tag + `URL.createObjectURL`. Export runs independent
-  of live playback state — you can export while the mix is playing,
-  since `renderMix()` builds its own isolated OfflineAudioContext and
-  chains rather than touching anything the live transport is using.
+- `src/decision/presets.js` — five presets (default, band, electronic,
+  acoustic, podcast), each a named parameter set with a plain-language
+  description. Values are reasoned-about starting points, not measured
+  against real mixes — documented as such, expect to need tuning by ear.
+  Notably, podcast's `panSpreadWidth: 0` needed a genuinely new
+  parameter (not just reusing `bassDominantThreshold`) since "keep
+  everything centered" and "these tracks are bass-heavy" are different
+  claims — panning.js now scales its spread by this factor.
+- `src/decision/index.js` — `runDecisionEngine(tracks, presetId)`,
+  defaults to `'default'` preset if omitted (backward compatible with
+  every prior caller/test). Resolves the preset once per run and
+  threads its parameters into each rule call.
+- `main.js` — added a preset `<select>` populated from `PRESETS`, with
+  a description line that updates on change. Changing preset stops any
+  live playback first (same pattern as changing the lead track) since
+  the old chain would otherwise be playing stale targets.
 
-Verified in Node: WAV encoder checked byte-for-byte against a small
-hand-computed buffer (RIFF/WAVE/fmt/data tags, channel count, sample
-rate, bit depth, and sample values all correct within 16-bit rounding).
-`renderMix()` checked with a mocked `OfflineAudioContext` — confirmed
-it throws with no playable tracks, and that it constructs the offline
-context with the right channel count, sample rate, and length (based
-on the longest track's duration). Did not, and cannot from here, verify
-that an actual exported WAV file opens correctly in a real player —
-that's real-browser-territory, same carried-over caveat as before.
+**Also did the main.js split that's been deferred twice** (see the
+note that used to live at the top of that file): the preset selector
+was explicitly the "second chunk of UI logic" the deferral note said
+would trigger it. Pulled all track-row rendering — meters, override
+sliders, reasoning panel — into `src/ui/trackList.js`. It's callback-
+based (takes handlers for onSetLead/onGainCommit/etc.) rather than
+importing decision/transport modules directly, so it only touches the
+DOM and stays testable independent of the rest of the app's wiring.
+`main.js` is now purely state + event wiring, calling
+`renderTrackList()` instead of a giant inline function.
 
-Next: pick between the two remaining Phase 7 candidates (save/load
-session, genre presets) — or, better, get the overdue real-browser
-testing pass done first, since it might reshape what's actually worth
-building next (e.g. if export sounds wrong, that's a processing-chain
-bug to fix before adding more features on top of it).
+Verified in Node: regression-checked that the `default` preset
+reproduces the exact pre-preset numbers from session 3/6's tests
+(-3dB cut, unchanged); confirmed all five presets produce genuinely
+different masking/level/pan numbers on the same synthetic input, not
+just cosmetically different config that doesn't actually flow through;
+confirmed podcast's `spreadWidth: 0` actually centers pan; confirmed
+manual overrides (Phase 6) and presets compose correctly together —
+an override survives both a preset switch and the backward-compatible
+no-presetId call signature.
+
+**Still zero real-browser testing across five sessions now.** This
+note is being repeated verbatim on purpose — the pattern of "verified
+in Node, ship it, defer testing" has now produced a genre-preset
+dropdown, an export button, override sliders, and real pause, none of
+which have been touched by an actual mouse in an actual browser. None
+of the Node-side verification can catch UI/UX issues (does the preset
+dropdown feel responsive, does switching presets mid-listening feel
+jarring, does the description text update correctly) — only real use
+can. Strongly recommend a testing pass before Phase 7b or anything else.
+
+Next: Phase 7b (save/load session) is the last undone Phase 7
+candidate from the original three. It's a bigger decision than 7a/7c
+were — needs to decide on a storage mechanism (localStorage can't hold
+audio file data, so a session save likely can't include the actual
+audio and would need the user to re-select the same files, or use the
+File System Access API to keep file handles — that's a real design
+question, not an implementation detail, worth surfacing explicitly
+next session rather than picking silently).
