@@ -57,7 +57,16 @@ export function buildTrackChain(context, track, destination) {
   const pannerNode = context.createStereoPanner();
   pannerNode.pan.value = targets.pan;
 
+  // Level metering tap: a parallel connection to an AnalyserNode, read
+  // by src/ui/meters.js. This doesn't affect the main signal — Web Audio
+  // nodes can feed multiple destinations, so the panner still sends its
+  // full signal on to `destination` as well. Tapped post-panner so the
+  // meter reflects the actual final level, not a pre-EQ/pre-gain one.
+  const analyserNode = context.createAnalyser();
+  analyserNode.fftSize = 256; // small — this is a level meter, not a spectrum display
+
   // Wire: source -> gain -> eq[0] -> eq[1] -> ... -> panner -> destination
+  //                                                         \-> analyser (tap)
   let node = sourceNode;
   node.connect(gainNode);
   node = gainNode;
@@ -67,12 +76,14 @@ export function buildTrackChain(context, track, destination) {
   }
   node.connect(pannerNode);
   pannerNode.connect(destination);
+  pannerNode.connect(analyserNode);
 
   return {
     sourceNode,
     gainNode,
     eqNodes,
     pannerNode,
+    analyserNode,
     start(when = 0) {
       sourceNode.start(when);
     },

@@ -11,6 +11,7 @@ session log entry, even a short one.
 - [x] Phase 2 — Analysis pipeline
 - [x] Phase 3 — Decision engine
 - [x] Phase 4 — Processing chain
+- [x] Phase 5 — UI: meters and playback
 - [ ] Phase 4 — Processing chain
 - [ ] Phase 5 — UI: meters and playback
 - [ ] Phase 6 — UI: manual overrides
@@ -18,9 +19,7 @@ session log entry, even a short one.
 
 ## Current focus
 
-Phase 5 — UI: meters and playback. Partially started (see below) — a
-minimal play/stop already exists from Phase 4; real transport polish
-and meters are still open.
+Phase 6 — UI: manual overrides. Not started.
 
 ## Session log
 
@@ -29,52 +28,64 @@ half-done, what to do next, any open decisions.
 
 ---
 
-**Session 4 (Phase 4 — processing chain)**
-Implemented the actual Web Audio graph:
-- `src/processing/bus.js` — `createBus(context)`, a single shared
-  `DynamicsCompressorNode` (threshold -12dB, ratio 3:1) connected to
-  `context.destination`. Simple glue compression to stop summed tracks
-  clipping, not a mastering limiter — documented as intentionally basic.
-- `src/processing/trackChain.js` — `buildTrackChain(context, track,
-  destination)` builds source → gain → [peaking EQ filter per masking
-  cut] → panner → destination per track, reading values straight from
-  `track.targets` (gain in dB converted to linear, EQ moves mapped from
-  band label to an approximate center frequency, pan applied directly).
-  Falls back to neutral values if `.targets` isn't set yet.
+**Session 5 (Phase 5 — UI: meters and playback)**
+Implemented real transport, level meters, and a reasoning panel:
 
-Verified node wiring order and parameter math with a mocked Web Audio
-context in Node (no real AudioContext available outside a browser) —
-confirmed the connection chain is source→gain→eq→panner→destination in
-that order, and that gain/pan/EQ frequency/EQ gain values all match
-what the decision engine produced. This only proves the *code* is
-correct, not that it *sounds* right — that needs real ears in a real
-browser.
+- `src/ui/transport.js` — `createTransport()`, a DOM-agnostic playback
+  state machine (`stopped`/`playing`/`paused`). **Real pause**, not
+  stop-and-restart: uses `AudioContext.suspend()`/`resume()`, which
+  works because Web Audio timing is entirely driven by
+  `context.currentTime`, and that freezes while suspended — so every
+  node's playback position freezes too, and resume picks up exactly
+  where it left off. Documented in-file, including the caveat that this
+  approach doesn't extend to per-track independent pause if that's ever
+  needed. Tagged each built chain with `chain.trackId` so UI code can
+  map audio chains back to track rows (needed for meters).
+- `src/ui/meters.js` — `readLevel(analyserNode)`, pure function reading
+  time-domain RMS (loudness, not spectrum) from an AnalyserNode.
+- `src/processing/trackChain.js` — added an `AnalyserNode` tapped in
+  parallel off each track's panner output (doesn't affect the main
+  signal path — Web Audio nodes can feed multiple destinations).
+- `main.js` — full rewrite of the transport wiring: separate Play /
+  Pause / Stop buttons reflecting transport status, an elapsed-time
+  readout updated via `requestAnimationFrame`, and live per-track meter
+  bars (width-based, not canvas — simple and sufficient here) reading
+  from each chain's analyser on the same rAF loop.
+- Reasoning panel: replaced the old button-tooltip with a proper
+  `<details>/<summary>` "Why these settings?" panel under each track
+  row, listing every reason string from `track.targets.reasons`.
 
-Added a minimal play/stop control ahead of full Phase 5 — this wasn't
-optional, since Phase 4's own definition of done ("audibly different
-result") requires *something* to trigger playback with. `main.js` now
-has `playMix()`/`stopMix()`: builds fresh chains for every track with
-`.targets` set, starts them together ~50ms in the future (small buffer
-for scheduling), and auto-stops when the longest track ends. Because
-`AudioBufferSourceNode` is one-shot, there's no pause/resume — every
-play rebuilds from scratch. Marking a new lead track while something is
-playing stops it first, since the old chain's EQ/gain nodes are already
-locked to the previous targets.
+Verified with mocked Web Audio contexts in Node (no browser available
+here): transport state transitions (stopped→playing→paused→playing→
+stopped) all behave correctly, including the important edge case of
+stopping while paused correctly resuming the context first (otherwise
+the *next* play() would start from a suspended context and produce
+silence). Also verified `readLevel()`'s RMS math against a known
+full-scale sine wave (expected ~0.707, got 0.707).
 
-**This has not been tested with real audio in a real browser yet** —
-only synthetic tracks and mocked Web Audio nodes, since neither is
-available in this environment. Testing with actual multitrack material
-by ear is the critical next step, ideally before adding any more
-features on top, since it's the first point where "does this sound
-good" can actually be evaluated instead of inferred from numbers.
+Also cleaned up a leftover orphaned CSS fragment in `index.html` from
+an earlier session's sed edit (a stray `font-size: 14px; }` with no
+selector, harmless but sloppy — worth a quick visual diff check after
+any future sed-based edits, not just grep for the target string).
 
-Not done: no pause (only stop+restart), no scrubbing/seek, no visual
-playhead, no per-track mute/solo, no meters. All squarely Phase 5.
+**Still needs real-browser testing with real audio** — this note has
+carried over from Phase 4 and is now more overdue, since meters and
+pause are the kind of thing that's easy to get subtly wrong in ways
+mocks can't catch (e.g. does the meter bar actually look responsive at
+60fps, does pause feel instant or laggy). Please test before Phase 6.
 
-Next: Phase 5 — UI: meters and playback. The play/stop button from this
-session covers the "playback" half loosely; focus next session on
-level meters (even a simple static per-track peak/RMS readout counts
-for v1 — doesn't need to be live-updating at first) and showing the
-decision engine's reasoning more visibly than a button tooltip (a
-proper panel, not `title=`). Real-browser testing with actual audio
-should happen before or alongside this session, not after.
+Not done: no scrubbing/seek, no per-track mute/solo, no visual
+playhead/timeline (only elapsed time as text). None of these are
+required for MVP; revisit only if they turn out to matter in practice.
+
+Next: Phase 6 — manual overrides. Needs `src/decision/overrides.js` to
+track which parameters are user-locked vs. automatic, so that
+re-running the decision engine (e.g. after changing the lead track)
+doesn't stomp on a manual adjustment. UI-wise, the simplest starting
+point is probably a draggable gain slider per track that, once touched,
+marks that track's gain as locked — pan and EQ overrides can follow
+the same pattern once gain override works end to end. Decide there
+whether "locked" is per-parameter (gain/pan/EQ independently) or
+all-or-nothing per track; per-parameter is more flexible but more UI
+and state to manage — make a call and document it in the file, same as
+prior phases.

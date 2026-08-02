@@ -2,40 +2,52 @@
 // chain, and UI. Kept intentionally thin — real logic lives in the
 // src/audio, src/analysis, src/decision, src/processing, src/ui modules.
 //
-// Phase 1 (audio loading) is wired up here directly since there's not
-// enough UI yet to warrant its own src/ui module. Once Phase 5 UI work
-// starts, the track-list rendering below should move to src/ui/.
+// Track-list rendering still lives here rather than in its own
+// src/ui/index.js module — it's grown a fair bit (meters, transport
+// readout, reasoning panel) but splitting it out is a refactor with no
+// functional payoff on its own. Worth doing once Phase 6 (manual
+// overrides) needs to hook into these same rows, not before.
 
-import { loadFiles, getAudioContext } from './audio/loader.js';
+import { loadFiles } from './audio/loader.js';
 import { analyzeTrack } from './analysis/index.js';
 import { runDecisionEngine } from './decision/index.js';
-import { buildTrackChain } from './processing/trackChain.js';
-import { createBus } from './processing/bus.js';
+import { createTransport } from './ui/transport.js';
+import { readLevel } from './ui/meters.js';
 
 /** @type {import('./audio/track.js').Track[]} */
 const tracks = [];
 
-// Phase 4 playback state. This is a minimal play/stop, not the full
-// Phase 5 transport (no scrubbing, no per-track mute/solo, no meters).
-// AudioBufferSourceNodes are one-shot, so each play rebuilds the chain
-// from scratch rather than pausing/resuming an existing one.
-let activeChains = [];
-let activeBus = null;
-let isPlaying = false;
-let stopTimeoutId = null;
+const transport = createTransport();
+transport.onEnded(() => {
+  updateTransportControls();
+});
+
+let meterLoopId = null;
 
 const fileInput = document.getElementById('file-input');
 const dropZone = document.getElementById('drop-zone');
 const tracksEl = document.getElementById('tracks');
 const errorsEl = document.getElementById('errors');
 const playBtn = document.getElementById('play-btn');
+const pauseBtn = document.getElementById('pause-btn');
+const stopBtn = document.getElementById('stop-btn');
+const timeEl = document.getElementById('transport-time');
 
 playBtn.addEventListener('click', () => {
-  if (isPlaying) {
-    stopMix();
-  } else {
-    playMix();
+  if (transport.play(tracks)) {
+    updateTransportControls();
+    startMeterLoop();
   }
+});
+
+pauseBtn.addEventListener('click', () => {
+  transport.pause();
+  updateTransportControls();
+});
+
+stopBtn.addEventListener('click', () => {
+  transport.stop();
+  updateTransportControls();
 });
 
 dropZone.addEventListener('click', () => fileInput.click());
@@ -76,17 +88,17 @@ async function handleFiles(fileList) {
 
   runDecisions();
   renderTracks();
-  updatePlayButton();
+  updateTransportControls();
 }
 
 function setLeadTrack(trackId) {
-  stopMix(); // targets are about to change under any currently-playing chain
+  transport.stop(); // targets are about to change under any currently-playing chain
+  updateTransportControls();
   for (const track of tracks) {
     track.isLead = track.id === trackId;
   }
   runDecisions();
   renderTracks();
-  updatePlayButton();
 }
 
 function runDecisions() {
@@ -96,45 +108,60 @@ function runDecisions() {
   }
 }
 
-function playMix() {
-  const playable = tracks.filter((t) => t.targets);
-  if (playable.length === 0) return;
+function updateTransportControls() {
+  const status = transport.getStatus();
+  const hasPlayable = tracks.some((t) => t.targets);
 
-  const context = getAudioContext();
-  const bus = createBus(context);
-  const chains = playable.map((track) => buildTrackChain(context, track, bus));
+  playBtn.disabled = status === 'playing' || !hasPlayable;
+  playBtn.textContent = status === 'paused' ? '▶ Resume' : '▶ Play mix';
+  pauseBtn.disabled = status !== 'playing';
+  stopBtn.disabled = status === 'stopped';
 
-  const startAt = context.currentTime + 0.05;
-  for (const chain of chains) chain.start(startAt);
-
-  activeChains = chains;
-  activeBus = bus;
-  isPlaying = true;
-  updatePlayButton();
-
-  const maxDuration = Math.max(...playable.map((t) => t.duration));
-  stopTimeoutId = setTimeout(() => {
-    if (isPlaying) stopMix();
-  }, (maxDuration + 0.2) * 1000);
-}
-
-function stopMix() {
-  if (stopTimeoutId) {
-    clearTimeout(stopTimeoutId);
-    stopTimeoutId = null;
+  if (status === 'stopped') {
+    stopMeterLoop();
+    timeEl.textContent = '';
   }
-  for (const chain of activeChains) chain.stop();
-  if (activeBus) activeBus.disconnect();
-  activeChains = [];
-  activeBus = null;
-  isPlaying = false;
-  updatePlayButton();
 }
 
-function updatePlayButton() {
-  const playableCount = tracks.filter((t) => t.targets).length;
-  playBtn.disabled = playableCount === 0;
-  playBtn.textContent = isPlaying ? '■ Stop' : '▶ Play mix';
+function startMeterLoop() {
+  if (meterLoopId !== null) return;
+  const tick = () => {
+    if (transport.getStatus() === 'stopped') {
+      meterLoopId = null;
+      return;
+    }
+    updateElapsedTime();
+    updateMeters();
+    meterLoopId = requestAnimationFrame(tick);
+  };
+  meterLoopId = requestAnimationFrame(tick);
+}
+
+function stopMeterLoop() {
+  if (meterLoopId !== null) {
+    cancelAnimationFrame(meterLoopId);
+    meterLoopId = null;
+  }
+}
+
+function updateElapsedTime() {
+  timeEl.textContent = formatDuration(transport.getElapsedSeconds());
+}
+
+function updateMeters() {
+  // Chains are ordered to match the playable-tracks list transport built
+  // them from, not necessarily `tracks` — match by matching the DOM
+  // element's data-track-id instead of assuming index alignment.
+  const chains = transport.getChains();
+  for (const chain of chains) {
+    const bar = document.querySelector(`.meter-fill[data-chain-track-id="${chain.trackId}"]`);
+    if (!bar) continue;
+    const level = readLevel(chain.analyserNode);
+    // RMS of a full-scale sine is ~0.7, so scale up a bit for a meter
+    // that visually uses more of its range on normal program material.
+    const pct = Math.min(100, level * 140);
+    bar.style.width = `${pct}%`;
+  }
 }
 
 function renderTracks() {
@@ -152,11 +179,8 @@ function renderTracks() {
         (track.targets.eqMoves.length > 0 ? ` · ${track.targets.eqMoves.length} EQ cut(s)` : '')
       : '';
 
-    const leadButton = document.createElement('button');
-    leadButton.className = 'lead-toggle';
-    leadButton.textContent = track.isLead ? '★ Lead' : 'Mark lead';
-    leadButton.title = track.targets ? track.targets.reasons.join('\n') : '';
-    leadButton.addEventListener('click', () => setLeadTrack(track.id));
+    const header = document.createElement('div');
+    header.className = 'track-header';
 
     const info = document.createElement('div');
     info.innerHTML = `
@@ -164,8 +188,37 @@ function renderTracks() {
       <span class="track-meta">${meta}${analysisMeta}${targetsMeta}</span>
     `;
 
-    el.appendChild(info);
-    el.appendChild(leadButton);
+    const leadButton = document.createElement('button');
+    leadButton.className = 'lead-toggle';
+    leadButton.textContent = track.isLead ? '★ Lead' : 'Mark lead';
+    leadButton.addEventListener('click', () => setLeadTrack(track.id));
+
+    header.appendChild(info);
+    header.appendChild(leadButton);
+
+    const meter = document.createElement('div');
+    meter.className = 'meter';
+    meter.innerHTML = `<div class="meter-fill" data-chain-track-id="${track.id}"></div>`;
+
+    el.appendChild(header);
+    el.appendChild(meter);
+
+    if (track.targets && track.targets.reasons.length > 0) {
+      const details = document.createElement('details');
+      details.className = 'reasons';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Why these settings?';
+      const list = document.createElement('ul');
+      for (const reason of track.targets.reasons) {
+        const li = document.createElement('li');
+        li.textContent = reason;
+        list.appendChild(li);
+      }
+      details.appendChild(summary);
+      details.appendChild(list);
+      el.appendChild(details);
+    }
+
     tracksEl.appendChild(el);
   }
 }
@@ -207,4 +260,5 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-console.log('levelhead: Phase 1 (audio loading) wired up');
+updateTransportControls();
+console.log('levelhead: Phase 5 (transport, meters, reasoning panel) wired up');
