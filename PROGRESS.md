@@ -12,6 +12,7 @@ session log entry, even a short one.
 - [x] Phase 3 — Decision engine
 - [x] Phase 4 — Processing chain
 - [x] Phase 5 — UI: meters and playback
+- [x] Phase 6 — UI: manual overrides
 - [ ] Phase 4 — Processing chain
 - [ ] Phase 5 — UI: meters and playback
 - [ ] Phase 6 — UI: manual overrides
@@ -19,7 +20,8 @@ session log entry, even a short one.
 
 ## Current focus
 
-Phase 6 — UI: manual overrides. Not started.
+Phase 7+ — Polish / TBD. All core MVP phases (0–6) are now complete.
+Nothing planned in detail yet — see "Next" below for candidates.
 
 ## Session log
 
@@ -28,64 +30,62 @@ half-done, what to do next, any open decisions.
 
 ---
 
-**Session 5 (Phase 5 — UI: meters and playback)**
-Implemented real transport, level meters, and a reasoning panel:
+**Session 6 (Phase 6 — manual overrides)**
+Scope decision made without asking further: overrides cover gain and
+pan only, not EQ moves. EQ cuts are already conditional (only appear
+when `detectMasking()` finds a real conflict) and building override UI
+for a variable-length per-band list is a bigger surface than a slider —
+revisit if gain/pan overrides prove insufficient in practice.
 
-- `src/ui/transport.js` — `createTransport()`, a DOM-agnostic playback
-  state machine (`stopped`/`playing`/`paused`). **Real pause**, not
-  stop-and-restart: uses `AudioContext.suspend()`/`resume()`, which
-  works because Web Audio timing is entirely driven by
-  `context.currentTime`, and that freezes while suspended — so every
-  node's playback position freezes too, and resume picks up exactly
-  where it left off. Documented in-file, including the caveat that this
-  approach doesn't extend to per-track independent pause if that's ever
-  needed. Tagged each built chain with `chain.trackId` so UI code can
-  map audio chains back to track rows (needed for meters).
-- `src/ui/meters.js` — `readLevel(analyserNode)`, pure function reading
-  time-domain RMS (loudness, not spectrum) from an AnalyserNode.
-- `src/processing/trackChain.js` — added an `AnalyserNode` tapped in
-  parallel off each track's panner output (doesn't affect the main
-  signal path — Web Audio nodes can feed multiple destinations).
-- `main.js` — full rewrite of the transport wiring: separate Play /
-  Pause / Stop buttons reflecting transport status, an elapsed-time
-  readout updated via `requestAnimationFrame`, and live per-track meter
-  bars (width-based, not canvas — simple and sufficient here) reading
-  from each chain's analyser on the same rAF loop.
-- Reasoning panel: replaced the old button-tooltip with a proper
-  `<details>/<summary>` "Why these settings?" panel under each track
-  row, listing every reason string from `track.targets.reasons`.
+- `src/audio/track.js` — added `track.overrides = { gainDb: null, pan:
+  null }`. `null` means "use the automatic value."
+- `src/decision/overrides.js` — `setGainOverride`/`clearGainOverride`/
+  `setPanOverride`/`clearPanOverride`, plus `applyOverrides(track,
+  targets)` which layers overrides on top of freshly-computed automatic
+  targets and appends a reason string noting what the automatic value
+  would have been.
+- `src/decision/index.js` — calls `applyOverrides()` as the final step
+  after masking/levels/panning, so overrides always win and are always
+  visible in the reasons list.
+- `src/processing/trackChain.js` — exported `dbToLinear()` (was
+  private) so UI code can convert slider dB values to linear gain for
+  live parameter updates without duplicating the formula.
+- `main.js` — added gain and pan sliders per track row. Important UX
+  detail: slider `input` events (fire continuously while dragging)
+  update the live audio param directly and refresh only a text label —
+  they do NOT trigger `renderTracks()`, because replacing the slider's
+  own DOM node mid-drag breaks the drag interaction in most browsers.
+  Only the `change` event (fires once, on release) commits the
+  override and does a full re-render. Reset buttons (↺) per parameter
+  clear the override and revert to automatic, updating any live-playing
+  chain immediately.
 
-Verified with mocked Web Audio contexts in Node (no browser available
-here): transport state transitions (stopped→playing→paused→playing→
-stopped) all behave correctly, including the important edge case of
-stopping while paused correctly resuming the context first (otherwise
-the *next* play() would start from a suspended context and produce
-silence). Also verified `readLevel()`'s RMS math against a known
-full-scale sine wave (expected ~0.707, got 0.707).
+Verified in Node with mocked tracks: automatic gain computed first,
+then overridden to a specific value, confirmed the override survives a
+second full decision-engine run (simulating e.g. a lead-track change
+or new track loading), confirmed clearing the override correctly
+reverts to the automatic value while an independently-set pan override
+remains untouched. All per-parameter independence checks passed.
 
-Also cleaned up a leftover orphaned CSS fragment in `index.html` from
-an earlier session's sed edit (a stray `font-size: 14px; }` with no
-selector, harmless but sloppy — worth a quick visual diff check after
-any future sed-based edits, not just grep for the target string).
+**Still not tested in a real browser** — this note has now carried
+across three sessions (4, 5, 6) and is overdue. The slider input/change
+split in particular is the kind of thing that's easy to get subtly
+wrong in a way no amount of Node-side testing catches (does dragging
+actually feel smooth, does the live audio update actually sound
+instant, does anything visually jank on reset). Please prioritize this
+before Phase 7.
 
-**Still needs real-browser testing with real audio** — this note has
-carried over from Phase 4 and is now more overdue, since meters and
-pause are the kind of thing that's easy to get subtly wrong in ways
-mocks can't catch (e.g. does the meter bar actually look responsive at
-60fps, does pause feel instant or laggy). Please test before Phase 6.
+Also worth a fresh look at whether `main.js` should finally be split —
+see the updated note at the top of that file. Not done this session;
+flagging so it doesn't get forgotten.
 
-Not done: no scrubbing/seek, no per-track mute/solo, no visual
-playhead/timeline (only elapsed time as text). None of these are
-required for MVP; revisit only if they turn out to matter in practice.
-
-Next: Phase 6 — manual overrides. Needs `src/decision/overrides.js` to
-track which parameters are user-locked vs. automatic, so that
-re-running the decision engine (e.g. after changing the lead track)
-doesn't stomp on a manual adjustment. UI-wise, the simplest starting
-point is probably a draggable gain slider per track that, once touched,
-marks that track's gain as locked — pan and EQ overrides can follow
-the same pattern once gain override works end to end. Decide there
-whether "locked" is per-parameter (gain/pan/EQ independently) or
-all-or-nothing per track; per-parameter is more flexible but more UI
-and state to manage — make a call and document it in the file, same as
-prior phases.
+Next: Phase 7+ is intentionally undefined. Candidates mentioned in
+AI_BUILD_GUIDE.md: genre presets, export/render to a single mixed
+file, save/load a session, visual EQ curve editing. Don't pick one
+without checking in on priority first — these are meaningfully
+different in scope (export is a solid, contained chunk of work;
+session save/load touches persistence and is a bigger decision; genre
+presets require deciding what "genre" even changes in the rule engine).
+Recommend: real-browser test pass first, then decide Phase 7 based on
+what that testing reveals is actually missing, rather than working
+through the candidate list in order.

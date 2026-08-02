@@ -13,6 +13,7 @@ import { determineReferenceTrack } from './reference.js';
 import { detectMasking } from './masking.js';
 import { balanceLevels } from './levels.js';
 import { assignPanning } from './panning.js';
+import { applyOverrides } from './overrides.js';
 
 /**
  * @param {import('../audio/track.js').Track[]} tracks
@@ -43,6 +44,8 @@ export function runDecisionEngine(tracks) {
       eqMoves: eqMoves.map((m) => ({ band: m.band, cutDb: m.cutDb })),
       reasons,
     };
+
+    applyOverrides(track, track.targets);
   }
 
   return {

@@ -2,17 +2,22 @@
 // chain, and UI. Kept intentionally thin — real logic lives in the
 // src/audio, src/analysis, src/decision, src/processing, src/ui modules.
 //
-// Track-list rendering still lives here rather than in its own
-// src/ui/index.js module — it's grown a fair bit (meters, transport
-// readout, reasoning panel) but splitting it out is a refactor with no
-// functional payoff on its own. Worth doing once Phase 6 (manual
-// overrides) needs to hook into these same rows, not before.
+// Track-list rendering (including Phase 6 override sliders) still lives
+// here rather than its own src/ui/index.js module. It's grown
+// substantially across phases 5 and 6 — this file is now a legitimate
+// refactor candidate. Deferred again because nothing is currently
+// broken by the size, and splitting it "just because it's long" without
+// a concrete next feature driving the split tends to produce arbitrary
+// boundaries. If Phase 7 adds another chunk of UI logic here, do the
+// split first before adding more.
 
 import { loadFiles } from './audio/loader.js';
 import { analyzeTrack } from './analysis/index.js';
 import { runDecisionEngine } from './decision/index.js';
+import { setGainOverride, clearGainOverride, setPanOverride, clearPanOverride } from './decision/overrides.js';
 import { createTransport } from './ui/transport.js';
 import { readLevel } from './ui/meters.js';
+import { dbToLinear } from './processing/trackChain.js';
 
 /** @type {import('./audio/track.js').Track[]} */
 const tracks = [];
@@ -148,6 +153,10 @@ function updateElapsedTime() {
   timeEl.textContent = formatDuration(transport.getElapsedSeconds());
 }
 
+function getLiveChain(trackId) {
+  return transport.getChains().find((c) => c.trackId === trackId) || null;
+}
+
 function updateMeters() {
   // Chains are ordered to match the playable-tracks list transport built
   // them from, not necessarily `tracks` — match by matching the DOM
@@ -203,6 +212,10 @@ function renderTracks() {
     el.appendChild(header);
     el.appendChild(meter);
 
+    if (track.targets) {
+      el.appendChild(buildOverrideControls(track));
+    }
+
     if (track.targets && track.targets.reasons.length > 0) {
       const details = document.createElement('details');
       details.className = 'reasons';
@@ -221,6 +234,122 @@ function renderTracks() {
 
     tracksEl.appendChild(el);
   }
+}
+
+// Builds the gain/pan override sliders for one track row. Deliberately
+// split into two DOM event patterns:
+//   - 'input' (fires continuously while dragging): update the live audio
+//     param directly and refresh only the text label — no re-render,
+//     since replacing the slider's own DOM node mid-drag would break
+//     the drag interaction in most browsers.
+//   - 'change' (fires once, on release): commit the override via
+//     setGainOverride/setPanOverride, re-run the decision engine (safe
+//     now that the drag has ended), and do a full renderTracks().
+function buildOverrideControls(track) {
+  const wrap = document.createElement('div');
+  wrap.className = 'overrides';
+
+  // --- Gain ---
+  const gainRow = document.createElement('label');
+  gainRow.className = 'override-row';
+  const gainLabelText = document.createElement('span');
+  gainLabelText.textContent = 'Gain';
+  const gainValue = document.createElement('span');
+  gainValue.className = 'override-value';
+  const gainSlider = document.createElement('input');
+  gainSlider.type = 'range';
+  gainSlider.min = '-12';
+  gainSlider.max = '12';
+  gainSlider.step = '0.5';
+  gainSlider.value = String(track.targets.gainDb);
+  const gainReset = document.createElement('button');
+  gainReset.type = 'button';
+  gainReset.className = 'override-reset';
+  gainReset.title = 'Reset to automatic';
+  gainReset.textContent = '↺';
+  gainReset.disabled = track.overrides.gainDb === null;
+
+  const updateGainLabel = (value, manual) => {
+    gainValue.textContent = `${formatSigned(value)}dB${manual ? ' (manual)' : ''}`;
+  };
+  updateGainLabel(track.targets.gainDb, track.overrides.gainDb !== null);
+
+  gainSlider.addEventListener('input', (e) => {
+    const value = parseFloat(e.target.value);
+    updateGainLabel(value, true);
+    const liveChain = getLiveChain(track.id);
+    if (liveChain) liveChain.gainNode.gain.value = dbToLinear(value);
+  });
+  gainSlider.addEventListener('change', (e) => {
+    setGainOverride(track, parseFloat(e.target.value));
+    runDecisions();
+    renderTracks();
+  });
+  gainReset.addEventListener('click', () => {
+    clearGainOverride(track);
+    runDecisions();
+    const liveChain = getLiveChain(track.id);
+    if (liveChain) liveChain.gainNode.gain.value = dbToLinear(track.targets.gainDb);
+    renderTracks();
+  });
+
+  gainRow.appendChild(gainLabelText);
+  gainRow.appendChild(gainSlider);
+  gainRow.appendChild(gainValue);
+  gainRow.appendChild(gainReset);
+
+  // --- Pan ---
+  const panRow = document.createElement('label');
+  panRow.className = 'override-row';
+  const panLabelText = document.createElement('span');
+  panLabelText.textContent = 'Pan';
+  const panValue = document.createElement('span');
+  panValue.className = 'override-value';
+  const panSlider = document.createElement('input');
+  panSlider.type = 'range';
+  panSlider.min = '-1';
+  panSlider.max = '1';
+  panSlider.step = '0.05';
+  panSlider.value = String(track.targets.pan);
+  const panReset = document.createElement('button');
+  panReset.type = 'button';
+  panReset.className = 'override-reset';
+  panReset.title = 'Reset to automatic';
+  panReset.textContent = '↺';
+  panReset.disabled = track.overrides.pan === null;
+
+  const updatePanLabel = (value, manual) => {
+    panValue.textContent = `${formatPan(value)}${manual ? ' (manual)' : ''}`;
+  };
+  updatePanLabel(track.targets.pan, track.overrides.pan !== null);
+
+  panSlider.addEventListener('input', (e) => {
+    const value = parseFloat(e.target.value);
+    updatePanLabel(value, true);
+    const liveChain = getLiveChain(track.id);
+    if (liveChain) liveChain.pannerNode.pan.value = value;
+  });
+  panSlider.addEventListener('change', (e) => {
+    setPanOverride(track, parseFloat(e.target.value));
+    runDecisions();
+    renderTracks();
+  });
+  panReset.addEventListener('click', () => {
+    clearPanOverride(track);
+    runDecisions();
+    const liveChain = getLiveChain(track.id);
+    if (liveChain) liveChain.pannerNode.pan.value = track.targets.pan;
+    renderTracks();
+  });
+
+  panRow.appendChild(panLabelText);
+  panRow.appendChild(panSlider);
+  panRow.appendChild(panValue);
+  panRow.appendChild(panReset);
+
+  wrap.appendChild(gainRow);
+  wrap.appendChild(panRow);
+  return wrap;
 }
 
 function formatSigned(value) {
@@ -261,4 +390,4 @@ function escapeHtml(str) {
 }
 
 updateTransportControls();
-console.log('levelhead: Phase 5 (transport, meters, reasoning panel) wired up');
+console.log('levelhead: Phase 6 (manual gain/pan overrides) wired up');

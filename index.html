@@ -65,6 +65,43 @@
       background: #2e7d32;
       /* no transition — meters should track the signal directly, not lag it */
     }
+    .overrides {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .override-row {
+      display: grid;
+      grid-template-columns: 36px 1fr 90px 24px;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #444;
+    }
+    .override-row input[type="range"] {
+      width: 100%;
+    }
+    .override-value {
+      font-variant-numeric: tabular-nums;
+      color: #666;
+      text-align: right;
+    }
+    .override-reset {
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: #999;
+      padding: 2px;
+    }
+    .override-reset:disabled {
+      color: #ddd;
+      cursor: default;
+    }
+    .override-reset:not(:disabled):hover {
+      color: #222;
+    }
     .reasons {
       margin-top: 8px;
       font-size: 13px;

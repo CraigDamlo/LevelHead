@@ -97,6 +97,6 @@ export function buildTrackChain(context, track, destination) {
   };
 }
 
-function dbToLinear(db) {
+export function dbToLinear(db) {
   return Math.pow(10, db / 20);
 }
