@@ -4,350 +4,178 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LevelHead</title>
-
-  <!--
-    Design direction (session 9): a studio rack unit, not a SaaS
-    dashboard. LevelHead reads as hardware — channel strips, VU-meter
-    level bars with real green/amber/red zones, a tape-deck transport,
-    a hardware nameplate header. Palette and type are defined once as
-    CSS custom properties below; every component derives from them.
-
-    Type is loaded from Google Fonts (Big Shoulders Display for the
-    industrial nameplate lettering, IBM Plex Sans for UI text, IBM Plex
-    Mono for numeric readouts — dB/pan/time values read like an
-    instrument's digital display). This is a deliberate exception to
-    the project's no-external-dependency default: it's presentation
-    only, degrades gracefully to the system-font fallbacks in each
-    font-family stack below if the CDN is unreachable, and doesn't
-    affect app functionality either way.
-  -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
   <style>
-    :root {
-      /* Palette: warm graphite chassis, recessed panel wells, and an
-         analog VU-meter amber/phosphor-green accent pair — evokes
-         tape saturation and meter glow rather than a generic app
-         accent color. */
-      --panel: #2a2926;
-      --panel-recessed: #1c1b19;
-      --ink: #ede6d6;
-      --ink-dim: #8b8478;
-      --ink-faint: #55524c;
-      --amber: #e8a94a;
-      --signal: #6fcf7a;
-      --hot: #d6564c;
-
-      --font-display: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
-      --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    :focus-visible {
-      outline: 2px solid var(--amber);
-      outline-offset: 2px;
-    }
-
     body {
-      margin: 0;
-      padding: 32px 16px 60px;
-      min-height: 100vh;
-      background: radial-gradient(ellipse at top, #333129, #1b1a17 70%);
-      color: var(--ink);
-      font-family: var(--font-ui);
-      display: flex;
-      justify-content: center;
-    }
-
-    .chassis {
-      width: 100%;
+      font-family: 'Inter', sans-serif;
       max-width: 720px;
-      background: linear-gradient(180deg, #302f2b, #262521);
-      border: 1px solid #141311;
-      border-radius: 10px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      padding: 8px 24px 24px;
+      margin: 40px auto;
+      padding: 0 20px 60px;
+      color: #f4eaff;
+      background:
+        radial-gradient(ellipse 600px 320px at 50% 0%, rgba(255,46,203,0.12), transparent 70%),
+        linear-gradient(180deg, #170a2e 0%, #0d0620 45%, #060310 100%);
     }
 
-    /* --- Nameplate header --- */
-    .nameplate {
+    /* ---------- hero / sun ---------- */
+    .hero {
       position: relative;
-      padding: 28px 8px 18px;
+      margin: 0 0 8px;
     }
-    .nameplate h1 {
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: 42px;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-      color: var(--ink);
-      margin: 0;
-      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
-    }
-    .tagline {
-      font-size: 13px;
-      color: var(--ink-dim);
-      margin: 6px 0 0;
-      letter-spacing: 0.01em;
-    }
-    .rivet {
-      position: absolute;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, #55524c, #1a1918 70%);
-      box-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
-    }
-    .rivet-tl { top: 14px; left: 14px; }
-    .rivet-tr { top: 14px; right: 14px; }
-
-    /* --- Load slot --- */
-    #drop-zone {
-      margin-top: 8px;
-      border: 2px dashed #4a473f;
-      border-radius: 6px;
-      background: var(--panel-recessed);
-      padding: 22px 20px;
-      text-align: center;
-      cursor: pointer;
-      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
-    }
-    #drop-zone.dragover {
-      border-color: var(--amber);
-      background: #24211a;
-    }
-    .load-slot-label {
-      display: block;
-      font-family: var(--font-display);
-      font-weight: 600;
-      font-size: 13px;
-      letter-spacing: 0.12em;
-      color: var(--amber);
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-    .load-slot-hint {
-      display: block;
-      font-size: 13px;
-      color: var(--ink-dim);
-    }
-
-    /* --- Preset module --- */
-    #preset-panel {
-      margin-top: 16px;
-      padding: 14px 16px;
-      border-radius: 6px;
-      background: var(--panel-recessed);
-      box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
-    }
-    .module-label {
-      font-family: var(--font-display);
-      font-weight: 600;
-      font-size: 12px;
-      letter-spacing: 0.14em;
-      color: var(--ink-dim);
-      text-transform: uppercase;
-      margin-bottom: 10px;
-    }
-    #preset-select {
-      font-family: var(--font-ui);
-      font-size: 14px;
-      padding: 7px 10px;
+    .horizon {
+      height: 170px;
       border-radius: 4px;
-      border: 1px solid #141311;
-      background: #232220;
-      color: var(--ink);
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(180deg, #2a1150 0%, #170a2e 100%);
+      border-bottom: 2px solid #ff2ecb;
+      box-shadow: 0 1px 24px rgba(255, 46, 203, 0.5);
     }
-    #preset-description {
+    .horizon::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(45, 226, 255, 0.5) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(45, 226, 255, 0.5) 1px, transparent 1px);
+      background-size: 100% 10px, 40px 100%;
+      transform: perspective(70px) rotateX(48deg) scaleX(2.8) scaleY(1.6);
+      transform-origin: bottom;
+      opacity: 0.5;
+    }
+    .horizon::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, #fff3b0 0%, #ff9d5c 45%, #ff2ecb 100%);
+      box-shadow: 0 0 34px rgba(255, 157, 92, 0.65);
+    }
+    .hero h1 {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -68%);
+      margin: 0;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 800;
+      font-size: 21px;
+      letter-spacing: 1.5px;
+      white-space: nowrap;
+      z-index: 2;
+      color: #2a1150;
+    }
+    .hero .tagline {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, 30%);
+      margin: 0;
+      z-index: 2;
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #3a1a5c;
+    }
+    .build-note {
       margin: 10px 0 0;
-      font-size: 13px;
-      color: var(--ink-dim);
-      line-height: 1.5;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #a98fd6;
     }
 
-    #errors {
-      margin-top: 12px;
-      color: var(--hot);
-      font-size: 13px;
-      font-family: var(--font-mono);
-    }
-
-    /* --- Channel rack --- */
     #tracks {
-      margin-top: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+      margin-top: 20px;
     }
-
     .track {
-      padding: 14px 16px 16px;
+      padding: 12px 14px;
+      border: 1px solid #4a2b7a;
       border-radius: 6px;
-      background: linear-gradient(180deg, #2f2e2a, #272621);
-      border: 1px solid #171614;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 2px 4px rgba(0, 0, 0, 0.3);
+      background: rgba(30, 14, 58, 0.6);
+      box-shadow: inset 0 0 0 1px rgba(45, 226, 255, 0.06);
+      margin-bottom: 10px;
+      font-size: 14px;
     }
     .track.is-lead {
-      border-color: var(--signal);
-      box-shadow: 0 0 0 1px rgba(111, 207, 122, 0.4), 0 2px 8px rgba(111, 207, 122, 0.15);
+      border-color: #ff2ecb;
+      box-shadow: 0 0 14px rgba(255, 46, 203, 0.35), inset 2px 0 0 #ff2ecb;
     }
-
     .track-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
     }
-    .channel-badge {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      letter-spacing: 0.06em;
-      color: var(--ink-faint);
-      margin-right: 8px;
-    }
     .track-name {
-      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      color: #f4eaff;
     }
     .track-meta {
-      display: block;
-      margin-top: 3px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--ink-dim);
+      font-family: 'JetBrains Mono', monospace;
+      color: #a98fd6;
     }
-
     .lead-toggle {
       flex-shrink: 0;
-      font-family: var(--font-ui);
-      font-weight: 600;
-      font-size: 11px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      padding: 7px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      padding: 6px 10px;
       border-radius: 4px;
-      border: 1px solid #141311;
-      background: #232220;
-      color: var(--ink-dim);
+      border: 1px solid #4a2b7a;
+      background: transparent;
+      color: #a98fd6;
       cursor: pointer;
     }
     .track.is-lead .lead-toggle {
-      background: radial-gradient(circle at 30% 30%, #8fe89a, #4fae5a);
-      color: #0e2012;
-      border-color: #2b6b35;
+      border-color: #ff2ecb;
+      background: #ff2ecb;
+      color: #2a0620;
+      box-shadow: 0 0 10px rgba(255, 46, 203, 0.6);
     }
-    @media (prefers-reduced-motion: no-preference) {
-      .track.is-lead .lead-toggle {
-        animation: led-pulse 2.4s ease-in-out infinite;
-      }
-    }
-    @keyframes led-pulse {
-      0%, 100% { box-shadow: 0 0 4px rgba(111, 207, 122, 0.5); }
-      50% { box-shadow: 0 0 10px rgba(111, 207, 122, 0.9); }
-    }
-
-    /* VU-style meter: fixed green/amber/red zones revealed by width,
-       the same way a physical LED meter lights more segments as level
-       rises. No transition on width — meters should track the signal
-       directly, not lag it. */
     .meter {
-      margin-top: 10px;
-      height: 10px;
-      border-radius: 2px;
-      background: var(--panel-recessed);
-      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+      margin-top: 8px;
+      height: 8px;
+      border-radius: 4px;
+      background: #170a2e;
+      border: 1px solid #3a2160;
       overflow: hidden;
-      position: relative;
-    }
-    .meter::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background-image: repeating-linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.06) 0,
-        rgba(255, 255, 255, 0.06) 1px,
-        transparent 1px,
-        transparent 10%
-      );
-      pointer-events: none;
     }
     .meter-fill {
       height: 100%;
       width: 0%;
-      background: linear-gradient(
-        90deg,
-        var(--signal) 0%,
-        var(--signal) 60%,
-        var(--amber) 75%,
-        var(--amber) 90%,
-        var(--hot) 100%
-      );
+      background: linear-gradient(90deg, #2de2ff, #ff2ecb);
+      box-shadow: 0 0 10px rgba(255, 46, 203, 0.6);
+      /* no transition — meters should track the signal directly, not lag it */
     }
-
-    /* --- Override sliders --- */
     .overrides {
-      margin-top: 10px;
+      margin-top: 8px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
     .override-row {
       display: grid;
-      grid-template-columns: 40px 1fr 86px 22px;
+      grid-template-columns: 36px 1fr 90px 24px;
       align-items: center;
       gap: 8px;
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      color: var(--ink-dim);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #a98fd6;
     }
     .override-row input[type="range"] {
-      -webkit-appearance: none;
-      appearance: none;
       width: 100%;
-      height: 4px;
-      background: var(--panel-recessed);
-      border-radius: 2px;
-      outline: none;
-      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
-    }
-    .override-row input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 14px;
-      height: 20px;
-      border-radius: 3px;
-      background: linear-gradient(180deg, #4a4844, #232220);
-      border: 1px solid #0f0e0d;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      cursor: pointer;
-      margin-top: -8px;
-    }
-    .override-row input[type="range"]::-moz-range-thumb {
-      width: 14px;
-      height: 20px;
-      border-radius: 3px;
-      background: linear-gradient(180deg, #4a4844, #232220);
-      border: 1px solid #0f0e0d;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-      cursor: pointer;
-    }
-    .override-row input[type="range"]::-moz-range-track {
-      height: 4px;
-      background: var(--panel-recessed);
-      border-radius: 2px;
+      accent-color: #ff2ecb;
     }
     .override-value {
-      font-family: var(--font-mono);
-      text-transform: none;
-      letter-spacing: 0;
-      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      color: #a98fd6;
       text-align: right;
     }
     .override-reset {
@@ -355,139 +183,154 @@
       background: none;
       cursor: pointer;
       font-size: 14px;
-      color: var(--ink-faint);
+      color: #6b4c99;
       padding: 2px;
     }
     .override-reset:disabled {
-      color: #3a3833;
+      color: #3a2160;
       cursor: default;
     }
     .override-reset:not(:disabled):hover {
-      color: var(--amber);
+      color: #2de2ff;
     }
-
-    /* --- Reasoning panel --- */
     .reasons {
-      margin-top: 10px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--ink-dim);
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #a98fd6;
     }
     .reasons summary {
       cursor: pointer;
-    }
-    .reasons summary:hover {
-      color: var(--amber);
+      color: #2de2ff;
     }
     .reasons ul {
-      margin: 8px 0 0;
-      padding-left: 16px;
+      margin: 6px 0 0;
+      padding-left: 18px;
     }
     .reasons li {
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
-
-    /* --- Transport deck --- */
+    #errors {
+      margin-top: 12px;
+      color: #ff2ecb;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+    }
+    #drop-zone {
+      margin-top: 20px;
+      border: 2px dashed #4a2b7a;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      color: #a98fd6;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+    }
+    #drop-zone.dragover {
+      border-color: #2de2ff;
+      color: #f4eaff;
+      background: rgba(45, 226, 255, 0.06);
+    }
     #transport {
       margin-top: 20px;
       display: flex;
       align-items: center;
       gap: 10px;
-      flex-wrap: wrap;
     }
     #transport button {
-      font-family: var(--font-ui);
-      font-weight: 600;
-      font-size: 13px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      padding: 12px 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      padding: 10px 18px;
       border-radius: 4px;
-      border: 1px solid #141311;
-      background: linear-gradient(180deg, #3a3833, #2a2926);
-      color: var(--ink);
-      box-shadow: 0 2px 0 #141311, inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      border: 1px solid #4a2b7a;
+      background: #170a2e;
+      color: #2de2ff;
       cursor: pointer;
-      transition: transform 0.05s ease, box-shadow 0.05s ease;
-    }
-    #transport button:active:not(:disabled) {
-      transform: translateY(2px);
-      box-shadow: 0 0 0 #141311;
     }
     #transport button:disabled {
-      background: #232220;
-      color: var(--ink-faint);
-      box-shadow: none;
+      background: #1c1230;
+      border-color: #2c1c48;
+      color: #4a3a6e;
       cursor: not-allowed;
-      border-color: #1a1918;
     }
     #transport-time {
-      font-family: var(--font-mono);
-      color: var(--ink-dim);
-      font-size: 13px;
-      min-width: 44px;
+      font-variant-numeric: tabular-nums;
+      font-family: 'JetBrains Mono', monospace;
+      color: #a98fd6;
+      font-size: 14px;
     }
     .export-btn {
       margin-left: auto;
-      background: linear-gradient(180deg, #7fd98a, #5fae6a) !important;
-      color: #16261a !important;
-      border-color: #234f2a !important;
+      border-color: #ff2ecb !important;
+      color: #ff2ecb !important;
+      box-shadow: 0 0 10px rgba(255, 46, 203, 0.35);
     }
     .export-btn:disabled {
-      background: #3a3833 !important;
-      color: var(--ink-faint) !important;
-      border-color: #232220 !important;
+      border-color: #2c1c48 !important;
+      color: #4a3a6e !important;
+      box-shadow: none;
     }
-
-    .footer-note {
-      margin-top: 22px;
-      font-size: 11px;
-      color: var(--ink-faint);
-      text-align: center;
-      letter-spacing: 0.03em;
+    #preset-panel {
+      margin-top: 16px;
+      padding: 12px 14px;
+      border: 1px solid #4a2b7a;
+      border-radius: 6px;
+      background: rgba(30, 14, 58, 0.6);
     }
-
-    @media (max-width: 420px) {
-      .nameplate h1 { font-size: 32px; }
-      .override-row { grid-template-columns: 34px 1fr 70px 20px; }
-      #transport button { padding: 10px 14px; font-size: 12px; }
-      .chassis { padding: 8px 16px 20px; }
+    #preset-panel label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #2de2ff;
+      margin-right: 8px;
+    }
+    #preset-select {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      border: 1px solid #4a2b7a;
+      background: #170a2e;
+      color: #f4eaff;
+    }
+    #preset-description {
+      margin: 8px 0 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #a98fd6;
     }
   </style>
 </head>
 <body>
-  <div class="chassis">
-    <header class="nameplate">
-      <div class="rivet rivet-tl"></div>
-      <div class="rivet rivet-tr"></div>
-      <h1>LevelHead</h1>
-      <p class="tagline">Automatic mixing console — analyzes each track, balances the mix, and shows its work.</p>
-    </header>
+  <div class="hero">
+    <div class="horizon"></div>
+    <h1>LevelHead</h1>
+    <p class="tagline">Automatic mixing tool</p>
+  </div>
+  <p class="build-note">Under construction. See PROGRESS.md.</p>
 
-    <div id="drop-zone">
-      <span class="load-slot-label">Load media</span>
-      <span class="load-slot-hint">Drop audio files here, or click to browse</span>
-      <input type="file" id="file-input" accept="audio/*" multiple hidden>
-    </div>
+  <div id="drop-zone">
+    Drop audio files here, or click to choose files
+    <input type="file" id="file-input" accept="audio/*" multiple hidden>
+  </div>
 
-    <div id="preset-panel">
-      <div class="module-label">Mode select</div>
-      <select id="preset-select"></select>
-      <p id="preset-description"></p>
-    </div>
+  <div id="preset-panel">
+    <label for="preset-select">Genre preset</label>
+    <select id="preset-select"></select>
+    <p id="preset-description"></p>
+  </div>
 
-    <div id="errors"></div>
-    <div id="tracks"></div>
+  <div id="errors"></div>
+  <div id="tracks"></div>
 
-    <div id="transport">
-      <button id="play-btn" disabled>▶ Play mix</button>
-      <button id="pause-btn" disabled>⏸ Pause</button>
-      <button id="stop-btn" disabled>■ Stop</button>
-      <span id="transport-time"></span>
-      <button id="export-btn" disabled class="export-btn">⬇ Export mix</button>
-    </div>
-
-    <p class="footer-note">LevelHead — a work in progress. See PROGRESS.md for what's built and what's next.</p>
+  <div id="transport">
+    <button id="play-btn" disabled>▶ Play mix</button>
+    <button id="pause-btn" disabled>⏸ Pause</button>
+    <button id="stop-btn" disabled>■ Stop</button>
+    <span id="transport-time"></span>
+    <button id="export-btn" disabled class="export-btn">⬇ Export mix</button>
   </div>
 
   <script type="module" src="./src/main.js"></script>
