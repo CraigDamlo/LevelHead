@@ -15,6 +15,7 @@ session log entry, even a short one.
 - [x] Phase 6 — UI: manual overrides
 - [x] Phase 7a — Export to WAV
 - [x] Phase 7c — Genre presets
+- [x] Session 9 — Visual design pass (studio-rack identity)
 - [ ] Phase 4 — Processing chain
 - [ ] Phase 5 — UI: meters and playback
 - [ ] Phase 6 — UI: manual overrides
@@ -22,10 +23,10 @@ session log entry, even a short one.
 
 ## Current focus
 
-Phase 7b (save/load session) is the last originally-discussed Phase 7
-candidate. Real-browser testing is still the single most overdue item
-— now carried across five sessions (4, 5, 6, 7a, 7c). Please prioritize
-this over any further feature work.
+Real-browser testing is now doing double duty: verify the app still
+*works* (carried over six sessions) AND verify the new visual design
+actually looks right (session 9, brand new, zero eyes on it yet). This
+is the most important thing to do before any further work of any kind.
 
 ## Session log
 
@@ -34,66 +35,80 @@ half-done, what to do next, any open decisions.
 
 ---
 
-**Session 8 (Phase 7c — genre presets)**
-Parametrized the three decision rules rather than adding new rule
-logic — each of `detectMasking()`, `balanceLevels()`, `assignPanning()`
-now accepts an optional `params` object (masking share/cut thresholds,
-level offset/clamp, pan bass-threshold/spread-width) with the exact
-same defaults as before if omitted, so this was a non-breaking change.
+**Session 9 (visual design pass)**
+Paused feature work per request to focus on visual identity. Read
+`/mnt/skills/public/frontend-design/SKILL.md` first and followed its
+process (ground in subject → plan palette/type/layout/signature →
+critique against generic-AI-design defaults → build).
 
-- `src/decision/presets.js` — five presets (default, band, electronic,
-  acoustic, podcast), each a named parameter set with a plain-language
-  description. Values are reasoned-about starting points, not measured
-  against real mixes — documented as such, expect to need tuning by ear.
-  Notably, podcast's `panSpreadWidth: 0` needed a genuinely new
-  parameter (not just reusing `bassDominantThreshold`) since "keep
-  everything centered" and "these tracks are bass-heavy" are different
-  claims — panning.js now scales its spread by this factor.
-- `src/decision/index.js` — `runDecisionEngine(tracks, presetId)`,
-  defaults to `'default'` preset if omitted (backward compatible with
-  every prior caller/test). Resolves the preset once per run and
-  threads its parameters into each rule call.
-- `main.js` — added a preset `<select>` populated from `PRESETS`, with
-  a description line that updates on change. Changing preset stops any
-  live playback first (same pattern as changing the lead track) since
-  the old chain would otherwise be playing stale targets.
+Design direction: LevelHead reads as a **studio rack unit**, not a
+SaaS dashboard — grounded in the subject (this is a mixing tool) and
+in prior context (the person's other DIY tools lean toward a
+hardware-adjacent, Dracula-themed aesthetic; there's a real synth in
+their studio). Concretely:
 
-**Also did the main.js split that's been deferred twice** (see the
-note that used to live at the top of that file): the preset selector
-was explicitly the "second chunk of UI logic" the deferral note said
-would trigger it. Pulled all track-row rendering — meters, override
-sliders, reasoning panel — into `src/ui/trackList.js`. It's callback-
-based (takes handlers for onSetLead/onGainCommit/etc.) rather than
-importing decision/transport modules directly, so it only touches the
-DOM and stays testable independent of the rest of the app's wiring.
-`main.js` is now purely state + event wiring, calling
-`renderTrackList()` instead of a giant inline function.
+- **Palette** — warm graphite chassis (`--panel #2a2926`, recessed
+  wells `--panel-recessed #1c1b19`), parchment-white ink
+  (`--ink #ede6d6`), and an analog VU-meter accent pair — amber
+  (`#e8a94a`) and phosphor green (`#6fcf7a`) — rather than a single
+  generic app accent color. Deliberately avoided the three clichéd
+  AI-design defaults named in the skill (cream+terracotta serif,
+  near-black+single-neon, broadsheet hairlines).
+- **Type** — Big Shoulders Display (condensed industrial, for the
+  nameplate/module labels) + IBM Plex Sans (UI text) + IBM Plex Mono
+  (every numeric readout — dB, pan, time, Hz — reads like an
+  instrument's digital display, not just body text). Loaded via Google
+  Fonts CDN — a deliberate, documented exception to the project's
+  no-dependency default; degrades to solid system-font fallbacks if
+  unreachable, doesn't affect functionality either way.
+- **Layout/signature** — the whole app sits in one `.chassis` panel
+  (rack unit against a dim room). Each track is a numbered channel
+  strip (`CH 01`, `CH 02`...) — legitimate here per the skill's own
+  test, since these genuinely are sequential hardware channels, not
+  decorative numbering. The **signature element** is the level meter:
+  not a flat bar, but a real green/amber/red VU-zone gradient with
+  tick marks, revealed by width the way physical LED meters light more
+  segments as level rises — the single most characteristic object in a
+  mixing engineer's world, made central rather than an afterthought.
+  Sliders got custom-styled thumbs (small rectangular fader caps, not
+  default OS sliders). Transport buttons got tactile press states
+  (translateY + shadow collapse on `:active`).
+- **Motion** — one deliberate touch: a slow LED-glow pulse on the
+  active lead-track button, wrapped in
+  `@media (prefers-reduced-motion: no-preference)` so it's opt-out by
+  default per user OS setting. Meters explicitly still have no
+  transition (must track signal directly, not lag it — this was
+  already true before the redesign and stayed true).
 
-Verified in Node: regression-checked that the `default` preset
-reproduces the exact pre-preset numbers from session 3/6's tests
-(-3dB cut, unchanged); confirmed all five presets produce genuinely
-different masking/level/pan numbers on the same synthetic input, not
-just cosmetically different config that doesn't actually flow through;
-confirmed podcast's `spreadWidth: 0` actually centers pan; confirmed
-manual overrides (Phase 6) and presets compose correctly together —
-an override survives both a preset switch and the backward-compatible
-no-presetId call signature.
+Code changes: full rewrite of `index.html` (structure + style — the
+old file was patched enough times across sessions that a clean rewrite
+was safer than another patch, especially after the orphaned-CSS
+incident a few sessions back). Small, scoped edit to
+`src/ui/trackList.js` to add the `CH 0N` channel badge (computed from
+array index, no new state). `main.js` untouched — no behavior changed,
+only presentation.
 
-**Still zero real-browser testing across five sessions now.** This
-note is being repeated verbatim on purpose — the pattern of "verified
-in Node, ship it, defer testing" has now produced a genre-preset
-dropdown, an export button, override sliders, and real pause, none of
-which have been touched by an actual mouse in an actual browser. None
-of the Node-side verification can catch UI/UX issues (does the preset
-dropdown feel responsive, does switching presets mid-listening feel
-jarring, does the description text update correctly) — only real use
-can. Strongly recommend a testing pass before Phase 7b or anything else.
+Verified: every DOM id/class the JS depends on (`getElementById`
+targets, dynamically-applied classNames from `trackList.js`) checked
+against the new markup programmatically — all present, nothing
+orphaned. CSS brace-balance checked. JS syntax-checked. Files serve
+correctly over a local static server.
 
-Next: Phase 7b (save/load session) is the last undone Phase 7
-candidate from the original three. It's a bigger decision than 7a/7c
-were — needs to decide on a storage mechanism (localStorage can't hold
-audio file data, so a session save likely can't include the actual
-audio and would need the user to re-select the same files, or use the
-File System Access API to keep file handles — that's a real design
-question, not an implementation detail, worth surfacing explicitly
-next session rather than picking silently).
+**Could not get a real render.** Tried installing a headless browser
+(Playwright/Chromium) to screenshot the result before handing it off,
+but the required package repo isn't in this sandbox's network
+allowlist — installation failed. So: every structural/wiring check
+that *can* be done outside a browser has been done, but the actual
+visual result — does the VU-meter gradient look convincing, does the
+nameplate header feel right at a real viewport size, does the amber/
+green accent pair actually read as "analog hardware" and not just
+"dark mode" — is completely unverified. This is now stacked on top of
+the pre-existing six-session functional-testing debt.
+
+Next: real-browser look is unambiguously the next step, no other
+candidate makes sense until this is actually seen. If the direction
+lands, fine-tune from there (spacing, contrast, whether the LED pulse
+is too subtle/too much, whether Big Shoulders Display renders as
+expected across platforms). If it doesn't land, better to find out
+now, with six components restyled in one clean pass, than after
+building more on top of an unverified look.

@@ -4,87 +4,350 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LevelHead</title>
+
+  <!--
+    Design direction (session 9): a studio rack unit, not a SaaS
+    dashboard. LevelHead reads as hardware — channel strips, VU-meter
+    level bars with real green/amber/red zones, a tape-deck transport,
+    a hardware nameplate header. Palette and type are defined once as
+    CSS custom properties below; every component derives from them.
+
+    Type is loaded from Google Fonts (Big Shoulders Display for the
+    industrial nameplate lettering, IBM Plex Sans for UI text, IBM Plex
+    Mono for numeric readouts — dB/pan/time values read like an
+    instrument's digital display). This is a deliberate exception to
+    the project's no-external-dependency default: it's presentation
+    only, degrades gracefully to the system-font fallbacks in each
+    font-family stack below if the CDN is unreachable, and doesn't
+    affect app functionality either way.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
   <style>
+    :root {
+      /* Palette: warm graphite chassis, recessed panel wells, and an
+         analog VU-meter amber/phosphor-green accent pair — evokes
+         tape saturation and meter glow rather than a generic app
+         accent color. */
+      --panel: #2a2926;
+      --panel-recessed: #1c1b19;
+      --ink: #ede6d6;
+      --ink-dim: #8b8478;
+      --ink-faint: #55524c;
+      --amber: #e8a94a;
+      --signal: #6fcf7a;
+      --hot: #d6564c;
+
+      --font-display: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
+      --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--amber);
+      outline-offset: 2px;
+    }
+
     body {
-      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 32px 16px 60px;
+      min-height: 100vh;
+      background: radial-gradient(ellipse at top, #333129, #1b1a17 70%);
+      color: var(--ink);
+      font-family: var(--font-ui);
+      display: flex;
+      justify-content: center;
+    }
+
+    .chassis {
+      width: 100%;
       max-width: 720px;
-      margin: 40px auto;
-      padding: 0 20px;
-      color: #222;
+      background: linear-gradient(180deg, #302f2b, #262521);
+      border: 1px solid #141311;
+      border-radius: 10px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      padding: 8px 24px 24px;
     }
-    #tracks {
-      margin-top: 20px;
+
+    /* --- Nameplate header --- */
+    .nameplate {
+      position: relative;
+      padding: 28px 8px 18px;
     }
-    .track {
-      padding: 10px 14px;
-      border: 1px solid #ddd;
+    .nameplate h1 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 42px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--ink);
+      margin: 0;
+      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+    }
+    .tagline {
+      font-size: 13px;
+      color: var(--ink-dim);
+      margin: 6px 0 0;
+      letter-spacing: 0.01em;
+    }
+    .rivet {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #55524c, #1a1918 70%);
+      box-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+    }
+    .rivet-tl { top: 14px; left: 14px; }
+    .rivet-tr { top: 14px; right: 14px; }
+
+    /* --- Load slot --- */
+    #drop-zone {
+      margin-top: 8px;
+      border: 2px dashed #4a473f;
       border-radius: 6px;
-      margin-bottom: 8px;
+      background: var(--panel-recessed);
+      padding: 22px 20px;
+      text-align: center;
+      cursor: pointer;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+    }
+    #drop-zone.dragover {
+      border-color: var(--amber);
+      background: #24211a;
+    }
+    .load-slot-label {
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: var(--amber);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .load-slot-hint {
+      display: block;
+      font-size: 13px;
+      color: var(--ink-dim);
+    }
+
+    /* --- Preset module --- */
+    #preset-panel {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 6px;
+      background: var(--panel-recessed);
+      box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
+    }
+    .module-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      color: var(--ink-dim);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    #preset-select {
+      font-family: var(--font-ui);
       font-size: 14px;
+      padding: 7px 10px;
+      border-radius: 4px;
+      border: 1px solid #141311;
+      background: #232220;
+      color: var(--ink);
+    }
+    #preset-description {
+      margin: 10px 0 0;
+      font-size: 13px;
+      color: var(--ink-dim);
+      line-height: 1.5;
+    }
+
+    #errors {
+      margin-top: 12px;
+      color: var(--hot);
+      font-size: 13px;
+      font-family: var(--font-mono);
+    }
+
+    /* --- Channel rack --- */
+    #tracks {
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .track {
+      padding: 14px 16px 16px;
+      border-radius: 6px;
+      background: linear-gradient(180deg, #2f2e2a, #272621);
+      border: 1px solid #171614;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 2px 4px rgba(0, 0, 0, 0.3);
     }
     .track.is-lead {
-      border-color: #c9a227;
-      background: #fffbea;
+      border-color: var(--signal);
+      box-shadow: 0 0 0 1px rgba(111, 207, 122, 0.4), 0 2px 8px rgba(111, 207, 122, 0.15);
     }
+
     .track-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
     }
+    .channel-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      color: var(--ink-faint);
+      margin-right: 8px;
+    }
     .track-name {
       font-weight: 600;
     }
     .track-meta {
-      color: #666;
+      display: block;
+      margin-top: 3px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-dim);
     }
+
     .lead-toggle {
       flex-shrink: 0;
-      font-size: 13px;
-      padding: 6px 10px;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-      background: #fff;
+      font-family: var(--font-ui);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 7px 12px;
+      border-radius: 4px;
+      border: 1px solid #141311;
+      background: #232220;
+      color: var(--ink-dim);
       cursor: pointer;
     }
     .track.is-lead .lead-toggle {
-      border-color: #c9a227;
-      background: #c9a227;
-      color: #fff;
+      background: radial-gradient(circle at 30% 30%, #8fe89a, #4fae5a);
+      color: #0e2012;
+      border-color: #2b6b35;
     }
+    @media (prefers-reduced-motion: no-preference) {
+      .track.is-lead .lead-toggle {
+        animation: led-pulse 2.4s ease-in-out infinite;
+      }
+    }
+    @keyframes led-pulse {
+      0%, 100% { box-shadow: 0 0 4px rgba(111, 207, 122, 0.5); }
+      50% { box-shadow: 0 0 10px rgba(111, 207, 122, 0.9); }
+    }
+
+    /* VU-style meter: fixed green/amber/red zones revealed by width,
+       the same way a physical LED meter lights more segments as level
+       rises. No transition on width — meters should track the signal
+       directly, not lag it. */
     .meter {
-      margin-top: 8px;
-      height: 6px;
-      border-radius: 3px;
-      background: #eee;
+      margin-top: 10px;
+      height: 10px;
+      border-radius: 2px;
+      background: var(--panel-recessed);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
       overflow: hidden;
+      position: relative;
+    }
+    .meter::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: repeating-linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.06) 0,
+        rgba(255, 255, 255, 0.06) 1px,
+        transparent 1px,
+        transparent 10%
+      );
+      pointer-events: none;
     }
     .meter-fill {
       height: 100%;
       width: 0%;
-      background: #2e7d32;
-      /* no transition — meters should track the signal directly, not lag it */
+      background: linear-gradient(
+        90deg,
+        var(--signal) 0%,
+        var(--signal) 60%,
+        var(--amber) 75%,
+        var(--amber) 90%,
+        var(--hot) 100%
+      );
     }
+
+    /* --- Override sliders --- */
     .overrides {
-      margin-top: 8px;
+      margin-top: 10px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
     }
     .override-row {
       display: grid;
-      grid-template-columns: 36px 1fr 90px 24px;
+      grid-template-columns: 40px 1fr 86px 22px;
       align-items: center;
       gap: 8px;
-      font-size: 13px;
-      color: #444;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: var(--ink-dim);
     }
     .override-row input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
       width: 100%;
+      height: 4px;
+      background: var(--panel-recessed);
+      border-radius: 2px;
+      outline: none;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+    .override-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 20px;
+      border-radius: 3px;
+      background: linear-gradient(180deg, #4a4844, #232220);
+      border: 1px solid #0f0e0d;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      cursor: pointer;
+      margin-top: -8px;
+    }
+    .override-row input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 20px;
+      border-radius: 3px;
+      background: linear-gradient(180deg, #4a4844, #232220);
+      border: 1px solid #0f0e0d;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      cursor: pointer;
+    }
+    .override-row input[type="range"]::-moz-range-track {
+      height: 4px;
+      background: var(--panel-recessed);
+      border-radius: 2px;
     }
     .override-value {
-      font-variant-numeric: tabular-nums;
-      color: #666;
+      font-family: var(--font-mono);
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--ink);
       text-align: right;
     }
     .override-reset {
@@ -92,135 +355,139 @@
       background: none;
       cursor: pointer;
       font-size: 14px;
-      color: #999;
+      color: var(--ink-faint);
       padding: 2px;
     }
     .override-reset:disabled {
-      color: #ddd;
+      color: #3a3833;
       cursor: default;
     }
     .override-reset:not(:disabled):hover {
-      color: #222;
+      color: var(--amber);
     }
+
+    /* --- Reasoning panel --- */
     .reasons {
-      margin-top: 8px;
-      font-size: 13px;
-      color: #444;
+      margin-top: 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-dim);
     }
     .reasons summary {
       cursor: pointer;
-      color: #666;
+    }
+    .reasons summary:hover {
+      color: var(--amber);
     }
     .reasons ul {
-      margin: 6px 0 0;
-      padding-left: 18px;
+      margin: 8px 0 0;
+      padding-left: 16px;
     }
     .reasons li {
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
-    #errors {
-      margin-top: 12px;
-      color: #b00020;
-      font-size: 14px;
-    }
-    #drop-zone {
-      margin-top: 20px;
-      border: 2px dashed #bbb;
-      border-radius: 8px;
-      padding: 30px;
-      text-align: center;
-      color: #666;
-      cursor: pointer;
-    }
-    #drop-zone.dragover {
-      border-color: #666;
-      color: #222;
-      background: #fafafa;
-    }
+
+    /* --- Transport deck --- */
     #transport {
       margin-top: 20px;
       display: flex;
       align-items: center;
       gap: 10px;
+      flex-wrap: wrap;
     }
     #transport button {
-      font-size: 15px;
-      padding: 10px 18px;
-      border-radius: 6px;
-      border: 1px solid #333;
-      background: #222;
-      color: #fff;
+      font-family: var(--font-ui);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 12px 20px;
+      border-radius: 4px;
+      border: 1px solid #141311;
+      background: linear-gradient(180deg, #3a3833, #2a2926);
+      color: var(--ink);
+      box-shadow: 0 2px 0 #141311, inset 0 1px 0 rgba(255, 255, 255, 0.05);
       cursor: pointer;
+      transition: transform 0.05s ease, box-shadow 0.05s ease;
+    }
+    #transport button:active:not(:disabled) {
+      transform: translateY(2px);
+      box-shadow: 0 0 0 #141311;
     }
     #transport button:disabled {
-      background: #ccc;
-      border-color: #ccc;
+      background: #232220;
+      color: var(--ink-faint);
+      box-shadow: none;
       cursor: not-allowed;
+      border-color: #1a1918;
     }
     #transport-time {
-      font-variant-numeric: tabular-nums;
-      color: #666;
-      font-size: 14px;
+      font-family: var(--font-mono);
+      color: var(--ink-dim);
+      font-size: 13px;
+      min-width: 44px;
     }
     .export-btn {
       margin-left: auto;
-      background: #1a5c2e !important;
-      border-color: #1a5c2e !important;
+      background: linear-gradient(180deg, #7fd98a, #5fae6a) !important;
+      color: #16261a !important;
+      border-color: #234f2a !important;
     }
     .export-btn:disabled {
-      background: #ccc !important;
-      border-color: #ccc !important;
+      background: #3a3833 !important;
+      color: var(--ink-faint) !important;
+      border-color: #232220 !important;
     }
-    #preset-panel {
-      margin-top: 16px;
-      padding: 12px 14px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      background: #fafafa;
+
+    .footer-note {
+      margin-top: 22px;
+      font-size: 11px;
+      color: var(--ink-faint);
+      text-align: center;
+      letter-spacing: 0.03em;
     }
-    #preset-panel label {
-      font-size: 13px;
-      font-weight: 600;
-      color: #444;
-      margin-right: 8px;
-    }
-    #preset-select {
-      font-size: 14px;
-      padding: 5px 8px;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-    }
-    #preset-description {
-      margin: 8px 0 0;
-      font-size: 13px;
-      color: #666;
+
+    @media (max-width: 420px) {
+      .nameplate h1 { font-size: 32px; }
+      .override-row { grid-template-columns: 34px 1fr 70px 20px; }
+      #transport button { padding: 10px 14px; font-size: 12px; }
+      .chassis { padding: 8px 16px 20px; }
     }
   </style>
 </head>
 <body>
-  <h1>LevelHead</h1>
-  <p>Automatic mixing tool — under construction. See PROGRESS.md.</p>
+  <div class="chassis">
+    <header class="nameplate">
+      <div class="rivet rivet-tl"></div>
+      <div class="rivet rivet-tr"></div>
+      <h1>LevelHead</h1>
+      <p class="tagline">Automatic mixing console — analyzes each track, balances the mix, and shows its work.</p>
+    </header>
 
-  <div id="drop-zone">
-    Drop audio files here, or click to choose files
-    <input type="file" id="file-input" accept="audio/*" multiple hidden>
-  </div>
+    <div id="drop-zone">
+      <span class="load-slot-label">Load media</span>
+      <span class="load-slot-hint">Drop audio files here, or click to browse</span>
+      <input type="file" id="file-input" accept="audio/*" multiple hidden>
+    </div>
 
-  <div id="preset-panel">
-    <label for="preset-select">Genre preset</label>
-    <select id="preset-select"></select>
-    <p id="preset-description"></p>
-  </div>
+    <div id="preset-panel">
+      <div class="module-label">Mode select</div>
+      <select id="preset-select"></select>
+      <p id="preset-description"></p>
+    </div>
 
-  <div id="errors"></div>
-  <div id="tracks"></div>
+    <div id="errors"></div>
+    <div id="tracks"></div>
 
-  <div id="transport">
-    <button id="play-btn" disabled>▶ Play mix</button>
-    <button id="pause-btn" disabled>⏸ Pause</button>
-    <button id="stop-btn" disabled>■ Stop</button>
-    <span id="transport-time"></span>
-    <button id="export-btn" disabled class="export-btn">⬇ Export mix</button>
+    <div id="transport">
+      <button id="play-btn" disabled>▶ Play mix</button>
+      <button id="pause-btn" disabled>⏸ Pause</button>
+      <button id="stop-btn" disabled>■ Stop</button>
+      <span id="transport-time"></span>
+      <button id="export-btn" disabled class="export-btn">⬇ Export mix</button>
+    </div>
+
+    <p class="footer-note">LevelHead — a work in progress. See PROGRESS.md for what's built and what's next.</p>
   </div>
 
   <script type="module" src="./src/main.js"></script>

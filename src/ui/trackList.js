@@ -28,12 +28,12 @@
  */
 export function renderTrackList(tracksEl, tracks, handlers) {
   tracksEl.innerHTML = '';
-  for (const track of tracks) {
-    tracksEl.appendChild(buildTrackRow(track, handlers));
-  }
+  tracks.forEach((track, index) => {
+    tracksEl.appendChild(buildTrackRow(track, index, handlers));
+  });
 }
 
-function buildTrackRow(track, handlers) {
+function buildTrackRow(track, index, handlers) {
   const el = document.createElement('div');
   el.className = 'track' + (track.isLead ? ' is-lead' : '');
 
@@ -49,8 +49,10 @@ function buildTrackRow(track, handlers) {
   const header = document.createElement('div');
   header.className = 'track-header';
 
+  const channelNumber = String(index + 1).padStart(2, '0');
   const info = document.createElement('div');
   info.innerHTML = `
+    <span class="channel-badge">CH ${channelNumber}</span>
     <span class="track-name">${escapeHtml(track.name)}</span>
     <span class="track-meta">${meta}${analysisMeta}${targetsMeta}</span>
   `;
